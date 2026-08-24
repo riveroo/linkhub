@@ -61,6 +61,8 @@ class LinkPageController extends Controller
             'product_layout' => ['required', Rule::in(['grid', 'list'])],
             'whatsapp_number' => ['nullable', 'string', 'max:30'],
             'source' => ['nullable', 'string', 'max:100'],
+            'sources' => ['nullable', 'array'],
+            'sources.*' => ['nullable', 'string', 'max:100'],
             'socials' => ['nullable', 'array'],
             'socials.*' => ['nullable', 'url', 'max:2048'],
             'profile_photo_file' => ['nullable', 'image', 'max:2048'],
@@ -84,6 +86,12 @@ class LinkPageController extends Controller
             $validated['whatsapp_number'] = preg_replace('/[^\d+]/', '', $validated['whatsapp_number']);
         }
 
+        // Clean sources array (remove empty or duplicate values)
+        $sources = [];
+        if (!empty($validated['sources'])) {
+            $sources = array_values(array_unique(array_filter(array_map('trim', $validated['sources']))));
+        }
+
         $page->update([
             'store_name' => $validated['store_name'],
             'bio' => $validated['bio'] ?? null,
@@ -94,7 +102,8 @@ class LinkPageController extends Controller
             'header_alignment' => $validated['header_alignment'],
             'product_layout' => $validated['product_layout'],
             'whatsapp_number' => $validated['whatsapp_number'] ?? null,
-            'source' => $validated['source'] ?? null,
+            'source' => $validated['source'] ?? ($sources[0] ?? null),
+            'sources' => $sources,
         ]);
 
         // Update social links

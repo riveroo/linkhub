@@ -214,11 +214,9 @@
                                         @endif
                                     </div>
 
-                                    <!-- CTA Button -->
+                                    <!-- CTA Button (routes through tracking endpoint) -->
                                     <a 
-                                        href="{{ $product->product_url }}" 
-                                        target="_blank" 
-                                        rel="noopener noreferrer"
+                                        href="{{ route('public.product.click', ['link' => $link, 'product' => $product]) }}" 
                                         class="mt-3 w-full inline-flex items-center justify-center gap-1 py-2 px-3 rounded-xl bg-indigo-50 text-indigo-700 font-bold text-xs hover:bg-indigo-600 hover:text-white transition-colors"
                                     >
                                         Lihat Produk
@@ -268,9 +266,7 @@
                                         @endif
 
                                         <a 
-                                            href="{{ $product->product_url }}" 
-                                            target="_blank" 
-                                            rel="noopener noreferrer"
+                                            href="{{ route('public.product.click', ['link' => $link, 'product' => $product]) }}" 
                                             class="mt-2 inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-700 hover:underline"
                                         >
                                             Lihat Produk &rarr;

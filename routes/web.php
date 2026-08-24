@@ -1,9 +1,12 @@
 <?php
 
+use App\Http\Controllers\Admin\AnalyticsController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\LinkController;
 use App\Http\Controllers\Admin\LinkPageController;
+use App\Http\Controllers\Admin\SourceController;
 use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\ProductClickController;
 use App\Http\Controllers\PublicLinkController;
 use Illuminate\Support\Facades\Route;
 
@@ -49,8 +52,21 @@ Route::middleware('auth')->group(function () {
         Route::post('/links/{link}/products/order', [LinkPageController::class, 'updateProductOrder'])->name('links.products.order');
         Route::post('/links/{link}/products/import', [LinkPageController::class, 'importProducts'])->name('links.products.import');
         Route::get('/links/{link}/products/template', [LinkPageController::class, 'downloadProductTemplate'])->name('links.products.template');
+
+        // Source Management Routes
+        Route::get('/links/{link}/sources', [SourceController::class, 'index'])->name('links.sources.index');
+        Route::post('/links/{link}/sources', [SourceController::class, 'store'])->name('links.sources.store');
+        Route::put('/links/{link}/sources/{source}', [SourceController::class, 'update'])->name('links.sources.update');
+        Route::delete('/links/{link}/sources/{source}', [SourceController::class, 'destroy'])->name('links.sources.destroy');
+
+        // Analytics Routes
+        Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics.index');
+        Route::get('/analytics/{link}', [AnalyticsController::class, 'show'])->name('analytics.show');
     });
 });
+
+// Product Click Tracking Route (Public — validates product belongs to link, tracks, then redirects)
+Route::get('/link/{link}/product/{product}/click', [ProductClickController::class, 'track'])->name('public.product.click');
 
 // System Utility Routes
 Route::get('/run-migration', function () {

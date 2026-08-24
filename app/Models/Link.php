@@ -26,6 +26,22 @@ class Link extends Model
     }
 
     /**
+     * Get all traffic sources for this link.
+     */
+    public function sources()
+    {
+        return $this->hasMany(Source::class)->orderBy('name');
+    }
+
+    /**
+     * Get all click events for this link.
+     */
+    public function clickEvents()
+    {
+        return $this->hasMany(ClickEvent::class);
+    }
+
+    /**
      * Scope a query to search links by title, slug, or url.
      */
     public function scopeSearch($query, ?string $term)

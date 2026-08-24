@@ -23,6 +23,11 @@ class LinkPage extends Model
         'product_layout',
         'whatsapp_number',
         'source',
+        'sources',
+    ];
+
+    protected $casts = [
+        'sources' => 'array',
     ];
 
     public function link(): BelongsTo

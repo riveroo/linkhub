@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\ClickEvent;
 use App\Models\Link;
 use App\Models\LinkCategory;
 use App\Models\LinkPage;
@@ -82,7 +83,10 @@ class PublicLinkPageTest extends TestCase
         $response->assertSee('https://wa.me/6281234567890', false);
         $response->assertSee('Instagram');
         $response->assertSee('Kaos Oversize Hitam');
-        $response->assertSee('https://shopee.co.id/kaos-oversize');
+        // Product URLs are now behind a tracking endpoint — the raw product URL
+        // should NOT appear in the HTML; instead the tracking route endpoint is rendered.
+        $response->assertDontSee('https://shopee.co.id/kaos-oversize');
+        $response->assertSee('/link/', false); // tracking route prefix
     }
 
     public function test_inactive_products_are_not_rendered_on_public_page(): void
@@ -141,15 +145,19 @@ class PublicLinkPageTest extends TestCase
         $response->assertSee('Kaos (1)');
     }
 
-    public function test_visiting_public_link_increments_click_counter(): void
+    public function test_visiting_public_link_creates_click_events(): void
     {
-        $this->assertEquals(0, $this->link->fresh()->clicks);
+        $this->assertDatabaseCount('click_events', 0);
 
         $this->get('/tokoberly');
-        $this->assertEquals(1, $this->link->fresh()->clicks);
+        $this->assertDatabaseHas('click_events', [
+            'link_id'    => $this->link->id,
+            'event_type' => ClickEvent::PAGE_VIEW,
+        ]);
+        $this->assertDatabaseCount('click_events', 1);
 
         $this->get('/tokoberly');
-        $this->assertEquals(2, $this->link->fresh()->clicks);
+        $this->assertDatabaseCount('click_events', 2);
     }
 
     public function test_slug_route_does_not_shadow_system_routes(): void

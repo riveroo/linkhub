@@ -30,4 +30,9 @@ class LinkProduct extends Model
     {
         return $this->belongsTo(LinkCategory::class, 'category_id');
     }
+
+    public function clickEvents()
+    {
+        return $this->hasMany(ClickEvent::class, 'product_id');
+    }
 }

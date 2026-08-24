@@ -69,6 +69,7 @@ class LinkPageEditorTest extends TestCase
             'product_layout' => 'list',
             'whatsapp_number' => '+6281234567890',
             'source' => 'instagram',
+            'sources' => ['instagram', 'tiktok', 'ads'],
             'socials' => [
                 'instagram' => 'https://instagram.com/officialstore',
                 'tiktok' => 'https://tiktok.com/@officialstore',
@@ -87,6 +88,9 @@ class LinkPageEditorTest extends TestCase
             'whatsapp_number' => '+6281234567890',
             'source' => 'instagram',
         ]);
+
+        $page = $this->link->fresh()->page;
+        $this->assertEquals(['instagram', 'tiktok', 'ads'], $page->sources);
 
         $this->assertDatabaseHas('link_socials', [
             'platform' => 'instagram',
