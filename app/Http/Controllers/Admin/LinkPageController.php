@@ -107,7 +107,7 @@ class LinkPageController extends Controller
         ]);
 
         // Update social links
-        $allowedPlatforms = ['facebook', 'instagram', 'tiktok', 'x', 'threads'];
+        $allowedPlatforms = ['facebook', 'instagram', 'tiktok', 'x', 'threads', 'shopee', 'tokopedia'];
         $submittedSocials = $request->input('socials', []);
 
         foreach ($allowedPlatforms as $platform) {

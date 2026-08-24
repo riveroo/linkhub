@@ -16,8 +16,8 @@ class AuthenticationTest extends TestCase
         $response = $this->get('/');
 
         $response->assertStatus(200);
-        $response->assertSee('Simple Link Sharing');
-        $response->assertSee('Get Started');
+        $response->assertSee('Semua yang ingin Anda bagikan');
+        $response->assertSee('Mulai Sekarang');
     }
 
     public function test_login_screen_can_be_rendered(): void
