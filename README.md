@@ -1,51 +1,68 @@
-# LinkHub
+# LinkHub — Personal Online Link Sharing & Storefront
 
-A simple and modern personal online link sharing application built with Laravel 12, Blade, Tailwind CSS, Vite, and Alpine.js.
-
----
-
-## Requirements
-
-* **PHP**: 8.2 / 8.3+
-* **Composer**: 2.x
-* **Node.js**: 18+ & NPM
-* **Database**: MySQL (recommended for production) or SQLite (development)
+**LinkHub** adalah aplikasi web sederhana, modern, dan responsif untuk **personal online link sharing** dan **mini storefront** (link-in-bio). Dibangun menggunakan Laravel 12, Tailwind CSS, Blade, Alpine.js, dan Vite.
 
 ---
 
-## Installation
+## 🚀 Fitur Utama
 
-1. **Clone the repository / open project directory**:
+### 1. Admin Dashboard & Analytics
+- **Authentication**: Login & Logout aman dengan Laravel Authentication.
+- **Ringkasan Stats Card**: Monitoring *Total Links*, *Active Links*, *Inactive Links*, dan *Total Clicks*.
+- **Click Counter**: Menghitung secara otomatis setiap kali halaman publik (`/{slug}`) dikunjungi.
+
+### 2. Manajemen Link (`/admin/links`)
+- CRUD Link dasar (Title & Slug).
+- Toggle Status (Active / Inactive).
+- Filter berdasarkan status dan pencarian judul/slug.
+- Aksi cepat: *Copy Link*, *Open Link*, *Atur Halaman*, *Edit*, *Delete*.
+
+### 3. Page Editor / Atur Halaman (`/admin/links/{id}/edit-page`)
+- **Tampilan & Profil Toko**: Atur nama toko, bio, foto profil, tipe cover (warna/gambar upload), alignment header (*center/left*), dan layout katalog (*Grid 2 Kolom* / *List 1 Kolom*).
+- **Traffic Source Parameter (`?src=`)**: Generator tag sumber trafik (misal: `instagram`, `tiktok`, `ads`) dilengkapi tombol instan *Copy Tracked Link*.
+- **Kontak & Social Media**: Tombol WhatsApp direct chat (normalisasi otomatis ke format internasional `628...`) dan tautan media sosial (Instagram, TikTok, Facebook, X, Threads).
+- **Kategori Produk**: Tambah, ubah, dan hapus kategori.
+- **Katalog Produk**: Tambah, ubah, hapus, urutkan, dan toggle status produk.
+- **Bulk Upload Excel / CSV**: Import massal produk dari spreadsheet (`.xlsx`, `.xls`, `.csv`). Kategori baru akan otomatis dibuatkan jika belum ada. Tersedia tombol *Download Template CSV*.
+- **Live Preview Interaktif**: Tampilan mockup smartphone di samping editor yang diperbarui secara real-time.
+
+### 4. Public Link Page (`/{slug}`)
+- Akses publik tanpa perlu login melalui URL bersih `https://domain.com/{slug}`.
+- **Pill Filter Kategori Interaktif**: Pengunjung dapat memfilter produk berdasarkan kategori secara instant tanpa reload halaman.
+- **Status Link Unavailable**: Tampilan khusus jika link dalam status non-aktif (HTTP 403) atau tidak ditemukan (HTTP 404).
+
+---
+
+## 🛠️ Persyaratan Sistem
+
+- **PHP**: 8.2 / 8.3+
+- **Composer**: 2.x
+- **Node.js**: 18+ & NPM
+- **Database**: MySQL / MariaDB (Rekomendasi) atau SQLite
+
+---
+
+## 📦 Cara Instalasi & Jalankan Project
+
+1. **Clone repository**:
    ```bash
+   git clone <repository-url>
    cd fastlink
    ```
 
-2. **Install PHP dependencies**:
+2. **Install Depedensi PHP & Node.js**:
    ```bash
    composer install
-   ```
-
-3. **Install Frontend dependencies**:
-   ```bash
    npm install
    ```
 
----
-
-## Environment Setup
-
-1. **Copy `.env` file**:
+3. **Konfigurasi Environment**:
    ```bash
    cp .env.example .env
-   ```
-
-2. **Generate Application Key**:
-   ```bash
    php artisan key:generate
    ```
 
-3. **Configure Database**:
-   Update your `.env` file with your MySQL database details:
+4. **Konfigurasi Database** di `.env`:
    ```env
    DB_CONNECTION=mysql
    DB_HOST=127.0.0.1
@@ -55,68 +72,42 @@ A simple and modern personal online link sharing application built with Laravel 
    DB_PASSWORD=
    ```
 
----
+5. **Migrasi Database & Seeder**:
+   ```bash
+   php artisan migrate --seed
+   ```
 
-## Database Setup
+6. **Jalankan Development Server**:
+   ```bash
+   # Terminal 1 (Laravel Server)
+   php artisan serve
 
-Run database migrations and seed the initial admin account:
-
-```bash
-php artisan migrate --seed
-```
-
-Or for a fresh database reset:
-
-```bash
-php artisan migrate:fresh --seed
-```
-
----
-
-## Default Admin Account
-
-Initial seeder creates an administrative account with hashed password:
-
-* **Email**: `admin@admin.com`
-* **Password**: `admin123`
+   # Terminal 2 (Vite Development Asset Compilation)
+   npm run dev
+   ```
+   Aplikasi dapat diakses melalui `http://localhost:8000`.
 
 ---
 
-## Run Development Server
+## 🔑 Akun Default Admin
 
-Start the Laravel backend server:
+Seeder bawaan menyediakan akun administrator default:
 
-```bash
-php artisan serve
-```
-
-In a separate terminal tab, start the Vite development server for live asset compilation:
-
-```bash
-npm run dev
-```
-
-The application will be accessible at `http://localhost:8000`.
+- **Email**: `admin@admin.com`
+- **Password**: `admin123`
 
 ---
 
-## Available Routes
+## 🧪 Menjalankan Automated Tests
 
-| Method | URI | Action / Description | Middleware |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/` | Landing Page | `web` |
-| `GET` | `/login` | Login Form | `guest` |
-| `POST` | `/login` | Authenticate User Credentials | `guest` |
-| `POST` | `/logout` | Terminate Admin Session | `auth` |
-| `GET` | `/admin` | Admin Dashboard | `auth` |
-
----
-
-## Testing
-
-Run the automated test suite with PHPUnit / Artisan:
+Jalankan pengujian otomatis (PHPUnit / Laravel Feature Tests):
 
 ```bash
 php artisan test
 ```
-# linkhub
+
+---
+
+## 📄 Lisensi
+
+Project ini dilisensikan di bawah [MIT License](LICENSE).
