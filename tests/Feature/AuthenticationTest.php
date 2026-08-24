@@ -76,8 +76,8 @@ class AuthenticationTest extends TestCase
         $response = $this->actingAs($user)->get('/admin');
 
         $response->assertStatus(200);
-        $response->assertSee('Welcome back, Admin');
-        $response->assertSee('Total Links');
+        $response->assertSee('Selamat datang kembali');
+        $response->assertSee('Active Links');
     }
 
     public function test_users_can_logout(): void
