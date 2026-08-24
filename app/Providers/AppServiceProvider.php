@@ -19,6 +19,15 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // Fallback to file session driver if database session driver is configured but sessions table does not exist yet
+        if (config('session.driver') === 'database') {
+            try {
+                if (!\Illuminate\Support\Facades\Schema::hasTable('sessions')) {
+                    config(['session.driver' => 'file']);
+                }
+            } catch (\Throwable $e) {
+                config(['session.driver' => 'file']);
+            }
+        }
     }
 }
