@@ -52,5 +52,41 @@ Route::middleware('auth')->group(function () {
     });
 });
 
+// System Utility Routes
+Route::get('/run-migration', function () {
+    try {
+        \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
+        $output = \Illuminate\Support\Facades\Artisan::output();
+        return response("<pre style='background:#1e293b;color:#f8fafc;padding:20px;border-radius:10px;font-family:monospace;'><strong>✓ Migration Output:</strong>\n\n" . e($output ?: 'Migration executed successfully with no pending migrations.') . "</pre>");
+    } catch (\Throwable $e) {
+        return response("<pre style='background:#ef4444;color:#ffffff;padding:20px;border-radius:10px;font-family:monospace;'><strong>✗ Migration Error:</strong>\n\n" . e($e->getMessage()) . "</pre>", 500);
+    }
+});
+
+Route::get('/run-seeder', function () {
+    try {
+        \Illuminate\Support\Facades\Artisan::call('db:seed', ['--force' => true]);
+        $output = \Illuminate\Support\Facades\Artisan::output();
+        return response("<pre style='background:#1e293b;color:#f8fafc;padding:20px;border-radius:10px;font-family:monospace;'><strong>✓ Seeder Output:</strong>\n\n" . e($output ?: 'Seeder executed successfully.') . "</pre>");
+    } catch (\Throwable $e) {
+        return response("<pre style='background:#ef4444;color:#ffffff;padding:20px;border-radius:10px;font-family:monospace;'><strong>✗ Seeder Error:</strong>\n\n" . e($e->getMessage()) . "</pre>", 500);
+    }
+});
+
+Route::get('/clear-all', function () {
+    try {
+        \Illuminate\Support\Facades\Artisan::call('optimize:clear');
+        \Illuminate\Support\Facades\Artisan::call('config:clear');
+        \Illuminate\Support\Facades\Artisan::call('cache:clear');
+        \Illuminate\Support\Facades\Artisan::call('route:clear');
+        \Illuminate\Support\Facades\Artisan::call('view:clear');
+        
+        $output = \Illuminate\Support\Facades\Artisan::output();
+        return response("<pre style='background:#1e293b;color:#f8fafc;padding:20px;border-radius:10px;font-family:monospace;'><strong>✓ Clear All Output:</strong>\n\n" . e($output ?: 'All caches (config, cache, routes, views) cleared successfully.') . "</pre>");
+    } catch (\Throwable $e) {
+        return response("<pre style='background:#ef4444;color:#ffffff;padding:20px;border-radius:10px;font-family:monospace;'><strong>✗ Clear All Error:</strong>\n\n" . e($e->getMessage()) . "</pre>", 500);
+    }
+});
+
 // Public Link Page Route (Must remain at the very end to prevent route collisions)
 Route::get('/{slug}', [PublicLinkController::class, 'show'])->name('public.link');
