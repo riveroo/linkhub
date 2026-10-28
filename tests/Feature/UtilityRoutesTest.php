@@ -32,4 +32,12 @@ class UtilityRoutesTest extends TestCase
         $response->assertStatus(200);
         $response->assertSee('Clear All Output');
     }
+
+    public function test_run_storage_link_route_executes_successfully(): void
+    {
+        $response = $this->get('/run-storage-link');
+
+        $response->assertStatus(200);
+        $response->assertSee('Storage Link Output');
+    }
 }

@@ -49,6 +49,22 @@ test.describe('authentication & navigation', () => {
     await expect(page.getByText(store.title)).toBeVisible();
   });
 
+  test('clicking short link badge opens the public page in a new tab', async ({ page, context, createStore }) => {
+    const store = createStore();
+    await page.goto('/admin/links');
+
+    const shortLink = page.getByRole('link', { name: new RegExp(store.slug) });
+    await expect(shortLink).toHaveAttribute('target', '_blank');
+    await expect(shortLink).toHaveAttribute('rel', 'noopener noreferrer');
+
+    const [newPage] = await Promise.all([
+      context.waitForEvent('page'),
+      shortLink.click(),
+    ]);
+    await newPage.waitForLoadState();
+    await expect(newPage).toHaveURL(new RegExp(`/${store.slug}$`));
+  });
+
   test('authorized user can open the product catalog of a store', async ({ page, createStore }) => {
     const store = createStore({
       categories: [{ name: 'Kaos' }],

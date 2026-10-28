@@ -105,5 +105,15 @@ Route::get('/clear-all', function () {
     }
 });
 
+Route::get('/run-storage-link', function () {
+    try {
+        \Illuminate\Support\Facades\Artisan::call('storage:link');
+        $output = \Illuminate\Support\Facades\Artisan::output();
+        return response("<pre style='background:#1e293b;color:#f8fafc;padding:20px;border-radius:10px;font-family:monospace;'><strong>✓ Storage Link Output:</strong>\n\n" . e($output ?: 'The [public/storage] link has been connected to [storage/app/public].') . "</pre>");
+    } catch (\Throwable $e) {
+        return response("<pre style='background:#ef4444;color:#ffffff;padding:20px;border-radius:10px;font-family:monospace;'><strong>✗ Storage Link Error:</strong>\n\n" . e($e->getMessage()) . "</pre>", 500);
+    }
+});
+
 // Public Link Page Route (Must remain at the very end to prevent route collisions)
 Route::get('/{slug}', [PublicLinkController::class, 'show'])->name('public.link');

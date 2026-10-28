@@ -45,6 +45,10 @@ class LinkManagementTest extends TestCase
         $response->assertSee('GitHub');
         $response->assertSee('github');
         $response->assertSee('Total Links');
+        // Short link column is a link opening in a new tab
+        $response->assertSee('target="_blank"', false);
+        $response->assertSee('rel="noopener noreferrer"', false);
+        $response->assertSee(url('/github'), false);
     }
 
     public function test_admin_can_create_link_with_valid_data(): void

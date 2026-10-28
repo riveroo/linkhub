@@ -281,9 +281,18 @@
 
                                     <!-- Short Link -->
                                     <td class="py-4 px-6">
-                                        <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
-                                            {{ $displayShortUrl }}
-                                        </span>
+                                        <a 
+                                            href="{{ $fullShortUrl }}" 
+                                            target="_blank" 
+                                            rel="noopener noreferrer"
+                                            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100 hover:bg-indigo-100 hover:text-indigo-800 hover:border-indigo-200 transition-colors group"
+                                            title="Open link in new tab"
+                                        >
+                                            <span>{{ $displayShortUrl }}</span>
+                                            <svg class="w-3.5 h-3.5 text-indigo-400 group-hover:text-indigo-600 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                            </svg>
+                                        </a>
                                     </td>
 
                                     <!-- Clicks Counter -->
