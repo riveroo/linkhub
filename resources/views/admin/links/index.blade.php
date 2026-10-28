@@ -325,45 +325,48 @@
                                         {{ $link->created_at->format('M d, Y') }}
                                     </td>
 
-                                    <!-- Actions Dropdown -->
-                                    <td class="py-4 px-6 text-right relative">
-                                        <button 
-                                            type="button"
-                                            @click.stop="menuOpen = !menuOpen" 
-                                            @click.away="menuOpen = false"
-                                            class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors focus:outline-none"
-                                        >
-                                            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-                                            </svg>
-                                        </button>
-
-                                        <!-- Dropdown Menu -->
-                                        <div 
-                                            x-show="menuOpen" 
-                                            x-transition:enter="transition ease-out duration-100"
-                                            x-transition:enter-start="transform opacity-0 scale-95"
-                                            x-transition:enter-end="transform opacity-100 scale-100"
-                                            x-transition:leave="transition ease-in duration-75"
-                                            x-transition:leave-start="transform opacity-100 scale-100"
-                                            x-transition:leave-end="transform opacity-0 scale-95"
-                                            class="absolute right-6 top-full mt-1 w-48 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50 text-left"
-                                            x-cloak
-                                        >
-                                            <!-- Atur Halaman -->
+                                    <!-- Actions: Atur Halaman Button + Option Dropdown -->
+                                    <td class="py-4 px-6 text-right whitespace-nowrap">
+                                        <div class="inline-flex items-center justify-end gap-2">
+                                            <!-- Button Atur Halaman (di sebelah kiri option button) -->
                                             <a 
                                                 href="{{ route('admin.links.edit-page', $link) }}" 
-                                                class="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 transition-colors"
+                                                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/60 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all shadow-2xs"
+                                                title="Atur Halaman"
                                             >
-                                                <svg class="w-4 h-4 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <svg class="w-3.5 h-3.5 text-indigo-600 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
                                                 </svg>
-                                                Atur Halaman
+                                                <span>Atur Halaman</span>
                                             </a>
 
-                                            <div class="border-t border-slate-100 my-1"></div>
+                                            <!-- Option Button & Dropdown -->
+                                            <div class="relative inline-block text-left">
+                                                <button 
+                                                    type="button"
+                                                    @click.stop="menuOpen = !menuOpen" 
+                                                    @click.away="menuOpen = false"
+                                                    class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors focus:outline-none"
+                                                    aria-label="Options"
+                                                >
+                                                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                                                    </svg>
+                                                </button>
 
-                                            <!-- Copy Link -->
+                                                <!-- Dropdown Menu -->
+                                                <div 
+                                                    x-show="menuOpen" 
+                                                    x-transition:enter="transition ease-out duration-100"
+                                                    x-transition:enter-start="transform opacity-0 scale-95"
+                                                    x-transition:enter-end="transform opacity-100 scale-100"
+                                                    x-transition:leave="transition ease-in duration-75"
+                                                    x-transition:leave-start="transform opacity-100 scale-100"
+                                                    x-transition:leave-end="transform opacity-0 scale-95"
+                                                    class="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50 text-left"
+                                                    x-cloak
+                                                >
+                                                    <!-- Copy Link -->
                                             <button 
                                                 type="button"
                                                 @click="copyToClipboard('{{ $fullShortUrl }}'); menuOpen = false" 
@@ -437,8 +440,10 @@
                                                 Delete
                                             </button>
                                         </div>
-                                    </td>
-                                </tr>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
                             @endforeach
                         </tbody>
                     </table>
