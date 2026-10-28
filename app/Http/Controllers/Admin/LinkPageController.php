@@ -595,6 +595,7 @@ class LinkPageController extends Controller
 
         $nameIndex = $this->findHeaderIndex($rawHeaders, ['product_name', 'product name', 'name', 'nama_produk', 'nama produk', 'nama']);
         $catIndex = $this->findHeaderIndex($rawHeaders, ['category', 'category_name', 'kategori', 'nama_kategori', 'nama kategori']);
+        $subcatIndex = $this->findHeaderIndex($rawHeaders, ['subcategory', 'sub_category', 'sub category', 'subkategori', 'sub_kategori', 'sub kategori', 'nama_subkategori']);
         $urlIndex = $this->findHeaderIndex($rawHeaders, ['product_url', 'product url', 'url', 'link', 'link_produk', 'link produk']);
         $descIndex = $this->findHeaderIndex($rawHeaders, ['description', 'deskripsi', 'detail']);
         $imgIndex = $this->findHeaderIndex($rawHeaders, ['product_image', 'product image', 'image', 'image_url', 'image url', 'gambar', 'foto', 'gambar_produk']);
@@ -606,6 +607,7 @@ class LinkPageController extends Controller
 
         $importedCount = 0;
         $createdCategoriesCount = 0;
+        $createdSubcategoriesCount = 0;
         $maxOrder = LinkProduct::where('link_page_id', $page->id)->max('display_order') ?? 0;
 
         for ($i = 1; $i < count($rows); $i++) {
@@ -613,6 +615,7 @@ class LinkPageController extends Controller
 
             $productName = isset($row[$nameIndex]) ? trim((string) $row[$nameIndex]) : '';
             $categoryName = isset($row[$catIndex]) ? trim((string) $row[$catIndex]) : '';
+            $subcategoryName = ($subcatIndex !== false && isset($row[$subcatIndex])) ? trim((string) $row[$subcatIndex]) : '';
             $productUrl = isset($row[$urlIndex]) ? trim((string) $row[$urlIndex]) : '';
             $description = ($descIndex !== false && isset($row[$descIndex])) ? trim((string) $row[$descIndex]) : null;
             $imageUrl = ($imgIndex !== false && isset($row[$imgIndex])) ? trim((string) $row[$imgIndex]) : null;
@@ -621,9 +624,9 @@ class LinkPageController extends Controller
                 continue; // Skip invalid rows
             }
 
-            // Find or create category
+            // Find or create category (case-insensitive check)
             $category = LinkCategory::where('link_page_id', $page->id)
-                ->where('name', $categoryName)
+                ->whereRaw('LOWER(name) = ?', [mb_strtolower($categoryName)])
                 ->first();
 
             if (!$category) {
@@ -634,11 +637,30 @@ class LinkPageController extends Controller
                 $createdCategoriesCount++;
             }
 
+            // Find or create subcategory under this category if provided
+            $subcategoryId = null;
+            if ($subcategoryName !== '') {
+                $subcategory = LinkSubcategory::where('category_id', $category->id)
+                    ->whereRaw('LOWER(name) = ?', [mb_strtolower($subcategoryName)])
+                    ->first();
+
+                if (!$subcategory) {
+                    $subcategory = LinkSubcategory::create([
+                        'category_id' => $category->id,
+                        'name' => $subcategoryName,
+                    ]);
+                    $createdSubcategoriesCount++;
+                }
+
+                $subcategoryId = $subcategory->id;
+            }
+
             $maxOrder++;
 
             LinkProduct::create([
                 'link_page_id' => $page->id,
                 'category_id' => $category->id,
+                'subcategory_id' => $subcategoryId,
                 'name' => $productName,
                 'description' => !empty($description) ? $description : null,
                 'image_url' => !empty($imageUrl) ? $imageUrl : null,
@@ -654,6 +676,9 @@ class LinkPageController extends Controller
         if ($createdCategoriesCount > 0) {
             $msg .= " Created {$createdCategoriesCount} new categories.";
         }
+        if ($createdSubcategoriesCount > 0) {
+            $msg .= " Created {$createdSubcategoriesCount} new subcategories.";
+        }
 
         return redirect()->route('admin.links.edit-page', ['link' => $link, 'tab' => 'products'])
             ->with('success', $msg);
@@ -664,11 +689,12 @@ class LinkPageController extends Controller
      */
     public function downloadProductTemplate(Link $link)
     {
-        $csvHeader = ['Product Name', 'Category', 'Product URL', 'Description', 'Product Image'];
+        $csvHeader = ['Product Name', 'Category', 'Subcategory', 'Product URL', 'Description', 'Product Image'];
         $sampleRows = [
-            ['Kaos Hitam Basic', 'Kaos', 'https://shopee.co.id/kaos-hitam', 'Kaos polos combed 30s premium', 'https://example.com/kaos.jpg'],
-            ['Hoodie Oversize', 'Hoodie', 'https://shopee.co.id/hoodie-oversize', 'Hoodie hangat fleece katun', 'https://example.com/hoodie.jpg'],
-            ['Topi Snapback', 'Aksesoris', 'https://tokopedia.com/topi-snapback', 'Topi kasual bordir rapi', 'https://example.com/topi.jpg'],
+            ['Kaos Hitam Basic', 'Pakaian', 'Kaos', 'https://shopee.co.id/kaos-hitam', 'Kaos polos combed 30s premium', 'https://example.com/kaos.jpg'],
+            ['Hoodie Oversize', 'Pakaian', 'Hoodie', 'https://shopee.co.id/hoodie-oversize', 'Hoodie hangat fleece katun', 'https://example.com/hoodie.jpg'],
+            ['Kalung Emas 24K', 'Kalung', 'Emas', 'https://tokopedia.com/kalung-emas', 'Kalung emas asli berkilau', 'https://example.com/kalung.jpg'],
+            ['Topi Snapback Polos', 'Aksesoris', '', 'https://tokopedia.com/topi-snapback', 'Topi kasual bordir rapi tanpa subkategori', 'https://example.com/topi.jpg'],
         ];
 
         $callback = function () use ($csvHeader, $sampleRows) {

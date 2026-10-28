@@ -1291,6 +1291,7 @@
                         <ul class="list-disc pl-4 space-y-0.5">
                             <li><span class="font-semibold text-slate-800">Product Name</span> (Wajib)</li>
                             <li><span class="font-semibold text-slate-800">Category</span> (Wajib — otomatis dibuat jika belum ada)</li>
+                            <li><span class="font-semibold text-slate-800">Subcategory</span> (Opsional — otomatis dibuat jika belum ada pada kategori terkait)</li>
                             <li><span class="font-semibold text-slate-800">Product URL</span> (Wajib)</li>
                             <li><span class="font-semibold text-slate-800">Description</span> (Opsional)</li>
                             <li><span class="font-semibold text-slate-800">Product Image</span> (Opsional URL gambar)</li>

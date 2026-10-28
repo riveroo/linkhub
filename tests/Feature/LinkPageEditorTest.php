@@ -169,6 +169,80 @@ class LinkPageEditorTest extends TestCase
 
         $response->assertStatus(200);
         $response->assertHeader('content-type', 'text/csv; charset=UTF-8');
+        
+        $content = $response->streamedContent();
+        $this->assertStringContainsString('Subcategory', $content);
+        $this->assertStringContainsString('"Product Name",Category,Subcategory,"Product URL"', $content);
+        $this->assertStringContainsString('Pakaian,Kaos,', $content);
+    }
+
+    public function test_admin_can_bulk_import_products_with_subcategories(): void
+    {
+        // Pre-create a category and subcategory
+        $page = $this->link->page()->firstOrCreate([
+            'store_name' => $this->link->title,
+        ]);
+        $existingCat = \App\Models\LinkCategory::create([
+            'link_page_id' => $page->id,
+            'name' => 'Kalung',
+        ]);
+        $existingSub = \App\Models\LinkSubcategory::create([
+            'category_id' => $existingCat->id,
+            'name' => 'Emas',
+        ]);
+
+        $csvContent = "Product Name,Category,Subcategory,Product URL,Description,Product Image\n";
+        // 1. Reuses existing subcategory 'Emas' under 'Kalung'
+        $csvContent .= "Kalung Rantai,Kalung,Emas,https://example.com/kalung-emas,Kalung emas murni,\n";
+        // 2. Automatically creates new subcategory 'Perak' under 'Kalung'
+        $csvContent .= "Kalung Liontin,Kalung,Perak,https://example.com/kalung-perak,Kalung perak 925,\n";
+        // 3. New category 'Pakaian' and new subcategory 'Kaos'
+        $csvContent .= "Kaos Vintage,Pakaian,Kaos,https://example.com/kaos-vintage,Kaos retro,\n";
+        // 4. Product without subcategory
+        $csvContent .= "Gelang Tali,Gelang,,https://example.com/gelang,Gelang tali polos,\n";
+
+        $file = \Illuminate\Http\UploadedFile::fake()->createWithContent('import_with_subcat.csv', $csvContent);
+
+        $response = $this->actingAs($this->admin)->post("/admin/links/{$this->link->id}/products/import", [
+            'file' => $file,
+        ]);
+
+        $response->assertRedirect();
+        $response->assertSessionHas('success');
+
+        // Subcategory 'Emas' is reused (count should still be 1 under Kalung)
+        $this->assertEquals(1, \App\Models\LinkSubcategory::where('category_id', $existingCat->id)->where('name', 'Emas')->count());
+
+        // Subcategory 'Perak' was created under Kalung
+        $subPerak = \App\Models\LinkSubcategory::where('category_id', $existingCat->id)->where('name', 'Perak')->first();
+        $this->assertNotNull($subPerak);
+
+        // Category 'Pakaian' and subcategory 'Kaos' were created
+        $catPakaian = \App\Models\LinkCategory::where('link_page_id', $page->id)->where('name', 'Pakaian')->first();
+        $this->assertNotNull($catPakaian);
+        $subKaos = \App\Models\LinkSubcategory::where('category_id', $catPakaian->id)->where('name', 'Kaos')->first();
+        $this->assertNotNull($subKaos);
+
+        // Verify products and relationships
+        $this->assertDatabaseHas('link_products', [
+            'name' => 'Kalung Rantai',
+            'category_id' => $existingCat->id,
+            'subcategory_id' => $existingSub->id,
+        ]);
+        $this->assertDatabaseHas('link_products', [
+            'name' => 'Kalung Liontin',
+            'category_id' => $existingCat->id,
+            'subcategory_id' => $subPerak->id,
+        ]);
+        $this->assertDatabaseHas('link_products', [
+            'name' => 'Kaos Vintage',
+            'category_id' => $catPakaian->id,
+            'subcategory_id' => $subKaos->id,
+        ]);
+        $this->assertDatabaseHas('link_products', [
+            'name' => 'Gelang Tali',
+            'subcategory_id' => null,
+        ]);
     }
 
     public function test_admin_can_bulk_import_products_and_auto_create_categories(): void
