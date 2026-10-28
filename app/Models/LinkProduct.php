@@ -13,6 +13,7 @@ class LinkProduct extends Model
     protected $fillable = [
         'link_page_id',
         'category_id',
+        'subcategory_id',
         'name',
         'description',
         'image_url',
@@ -29,6 +30,11 @@ class LinkProduct extends Model
     public function category(): BelongsTo
     {
         return $this->belongsTo(LinkCategory::class, 'category_id');
+    }
+
+    public function subcategory(): BelongsTo
+    {
+        return $this->belongsTo(LinkSubcategory::class, 'subcategory_id');
     }
 
     public function clickEvents()

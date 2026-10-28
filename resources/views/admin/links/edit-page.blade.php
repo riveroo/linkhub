@@ -384,11 +384,11 @@
                         <div class="flex items-center justify-between mb-4">
                             <div>
                                 <h3 class="text-base font-bold text-slate-900">Product Categories</h3>
-                                <p class="text-xs text-slate-500">Organize your products into categories</p>
+                                <p class="text-xs text-slate-500">Organize your products into categories and optional subcategories</p>
                             </div>
                             <button 
                                 type="button" 
-                                @click="categoryModalOpen = true" 
+                                @click="openAddCategoryModal()" 
                                 class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 font-semibold text-xs hover:bg-indigo-100 transition-colors"
                             >
                                 + Add Category
@@ -400,7 +400,12 @@
                             @forelse($page->categories as $category)
                                 <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-200">
                                     <span>{{ $category->name }}</span>
-                                    <button type="button" @click="openEditCategoryModal({{ json_encode($category) }})" class="text-slate-400 hover:text-indigo-600">
+                                    @if($category->subcategories->count() > 0)
+                                        <span class="px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600 text-[10px] font-bold border border-indigo-100" title="{{ $category->subcategories->pluck('name')->implode(', ') }}">
+                                            {{ $category->subcategories->count() }} sub
+                                        </span>
+                                    @endif
+                                    <button type="button" @click="openEditCategoryModal({{ json_encode($category) }})" class="text-slate-400 hover:text-indigo-600" aria-label="Edit category {{ $category->name }}">
                                         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                                         </svg>
@@ -408,7 +413,7 @@
                                     <form method="POST" action="{{ route('admin.links.categories.destroy', ['link' => $link, 'category' => $category]) }}" class="inline">
                                         @csrf
                                         @method('DELETE')
-                                        <button type="submit" onclick="return confirm('Delete this category? Products in this category will also be deleted.')" class="text-slate-400 hover:text-red-600">
+                                        <button type="submit" onclick="return confirm('Delete this category? Products in this category will also be deleted.')" class="text-slate-400 hover:text-red-600" aria-label="Delete category {{ $category->name }}">
                                             <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                                             </svg>
@@ -441,7 +446,7 @@
                                 </button>
                                 <button 
                                     type="button" 
-                                    @click="productModalOpen = true" 
+                                    @click="openAddProductModal()" 
                                     @if(count($page->categories) === 0) disabled title="Create a category first" @endif
                                     class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold text-xs shadow-md shadow-indigo-600/20 hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
@@ -456,10 +461,110 @@
                                 <p class="text-xs text-slate-400 mt-1">Create categories and click "+ Add Product" to build your catalog.</p>
                             </div>
                         @else
+                            <!-- Bulk Actions Contextual Toolbar -->
+                            <div 
+                                x-show="selectedProductIds.length > 0" 
+                                x-transition:enter="transition ease-out duration-150"
+                                x-transition:enter-start="opacity-0 -translate-y-2"
+                                x-transition:enter-end="opacity-100 translate-y-0"
+                                class="bg-indigo-50/80 border-b border-indigo-100 px-6 py-3 flex flex-wrap items-center justify-between gap-3 text-xs"
+                                x-cloak
+                            >
+                                <div class="flex items-center gap-3">
+                                    <span class="inline-flex items-center px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-bold text-xs shadow-xs">
+                                        <span x-text="selectedProductIds.length"></span>&nbsp;selected
+                                    </span>
+                                    <button 
+                                        type="button" 
+                                        @click="clearProductSelection()" 
+                                        class="text-indigo-700 hover:text-indigo-900 font-semibold underline text-xs transition-colors"
+                                    >
+                                        Deselect All
+                                    </button>
+                                </div>
+
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <!-- Bulk Edit Category -->
+                                    <button 
+                                        type="button" 
+                                        @click="openBulkCategoryModal()" 
+                                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-700 font-semibold hover:bg-slate-50 transition-colors shadow-2xs"
+                                    >
+                                        <svg class="w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                                        </svg>
+                                        Edit Category
+                                    </button>
+
+                                    <!-- Bulk Edit Subcategory -->
+                                    <button 
+                                        type="button" 
+                                        @click="openBulkSubcategoryModal()" 
+                                        :disabled="!canBulkEditSubcategory"
+                                        :title="subcategoryActionTooltip"
+                                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border font-semibold transition-colors shadow-2xs"
+                                        :class="canBulkEditSubcategory ? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50' : 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed opacity-60'"
+                                    >
+                                        <svg class="w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                                        </svg>
+                                        Edit Subcategory
+                                    </button>
+
+                                    <!-- Bulk Status: Activate (Shown when all inactive OR mixed) -->
+                                    <button 
+                                        type="button" 
+                                        x-show="statusActionVisibility.showActivate" 
+                                        @click="openBulkStatusModal('activate')" 
+                                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 font-semibold hover:bg-emerald-100 transition-colors shadow-2xs"
+                                    >
+                                        <svg class="w-3.5 h-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        Activate
+                                    </button>
+
+                                    <!-- Bulk Status: Deactivate (Shown when all active OR mixed) -->
+                                    <button 
+                                        type="button" 
+                                        x-show="statusActionVisibility.showDeactivate" 
+                                        @click="openBulkStatusModal('deactivate')" 
+                                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 font-semibold hover:bg-amber-100 transition-colors shadow-2xs"
+                                    >
+                                        <svg class="w-3.5 h-3.5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                                        </svg>
+                                        Deactivate
+                                    </button>
+
+                                    <!-- Bulk Delete -->
+                                    <button 
+                                        type="button" 
+                                        @click="openBulkDeleteModal()" 
+                                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-red-200 bg-red-50 text-red-700 font-semibold hover:bg-red-100 transition-colors shadow-2xs"
+                                    >
+                                        <svg class="w-3.5 h-3.5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                        Delete
+                                    </button>
+                                </div>
+                            </div>
+
                             <div class="overflow-x-auto">
                                 <table class="w-full text-left border-collapse text-xs">
                                     <thead>
                                         <tr class="border-b border-slate-100 bg-slate-50/50 font-bold text-slate-500 uppercase tracking-wider">
+                                            <th class="py-3 px-3 w-10 text-center">
+                                                <input 
+                                                    type="checkbox" 
+                                                    :checked="isAllCurrentPageSelected" 
+                                                    x-effect="$el.indeterminate = isHeaderIndeterminate"
+                                                    @change="toggleSelectAllCurrentPage($event.target.checked)"
+                                                    aria-label="Select all products on this page"
+                                                    class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" 
+                                                />
+                                            </th>
                                             <th class="py-3 px-4">Product</th>
                                             <th class="py-3 px-4">Category</th>
                                             <th class="py-3 px-4">Status</th>
@@ -469,7 +574,16 @@
                                     </thead>
                                     <tbody class="divide-y divide-slate-100">
                                         @foreach($page->products as $product)
-                                            <tr class="hover:bg-slate-50/80">
+                                            <tr class="hover:bg-slate-50/80 transition-colors" :class="selectedProductIds.includes({{ $product->id }}) ? 'bg-indigo-50/30' : ''">
+                                                <td class="py-3 px-3 text-center">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        :checked="selectedProductIds.includes({{ $product->id }})"
+                                                        @change="toggleProductSelection({{ $product->id }}, $event.target.checked)"
+                                                        aria-label="Select product {{ $product->name }}"
+                                                        class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" 
+                                                    />
+                                                </td>
                                                 <td class="py-3 px-4 font-semibold text-slate-900">
                                                     <div class="flex items-center gap-2.5">
                                                         <div class="w-8 h-8 rounded-lg bg-slate-100 overflow-hidden shrink-0">
@@ -486,9 +600,16 @@
                                                     </div>
                                                 </td>
                                                 <td class="py-3 px-4 text-slate-600">
-                                                    <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-medium">
-                                                        {{ $product->category->name ?? '-' }}
-                                                    </span>
+                                                    <div class="flex flex-wrap items-center gap-1">
+                                                        <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-medium">
+                                                            {{ $product->category->name ?? '-' }}
+                                                        </span>
+                                                        @if($product->subcategory)
+                                                            <span class="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-medium text-[10px]">
+                                                                {{ $product->subcategory->name }}
+                                                            </span>
+                                                        @endif
+                                                    </div>
                                                 </td>
                                                 <td class="py-3 px-4">
                                                     @if($product->status === 'active')
@@ -501,7 +622,7 @@
                                                     {{ $product->display_order }}
                                                 </td>
                                                 <td class="py-3 px-4 text-right space-x-1 whitespace-nowrap">
-                                                    <button type="button" @click="openEditProductModal({{ json_encode($product) }})" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
+                                                    <button type="button" @click="openEditProductModal({{ json_encode($product) }})" aria-label="Edit product {{ $product->name }}" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
                                                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                                         </svg>
@@ -509,13 +630,13 @@
                                                     <form method="POST" action="{{ route('admin.links.products.toggle-status', ['link' => $link, 'product' => $product]) }}" class="inline">
                                                         @csrf
                                                         @method('PATCH')
-                                                        <button type="submit" class="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50">
+                                                        <button type="submit" aria-label="Toggle status of product {{ $product->name }}" class="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50">
                                                             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
                                                             </svg>
                                                         </button>
                                                     </form>
-                                                    <button type="button" @click="openDeleteProductModal({{ json_encode($product) }})" class="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50">
+                                                    <button type="button" @click="openDeleteProductModal({{ json_encode($product) }})" aria-label="Delete product {{ $product->name }}" class="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50">
                                                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                                         </svg>
@@ -644,12 +765,22 @@
                         </div>
 
                         <!-- Category Filter Pills in Preview -->
-                        <div class="px-4 mb-3 flex gap-1.5 overflow-x-auto pb-1" x-show="categories.length > 0">
-                            <button type="button" @click="selectedCategoryFilter = 'all'" class="px-2.5 py-1 rounded-full text-[10px] font-semibold whitespace-nowrap transition-colors" :class="selectedCategoryFilter === 'all' ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-700'">All</button>
+                        <div class="px-4 mb-2 flex gap-1.5 overflow-x-auto pb-1" x-show="categories.length > 0">
+                            <button type="button" @click="selectPreviewCategory('all')" class="px-2.5 py-1 rounded-full text-[10px] font-semibold whitespace-nowrap transition-colors" :class="selectedCategoryFilter === 'all' ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-700'">All</button>
                             <template x-for="cat in categories" :key="cat.id">
-                                <button type="button" @click="selectedCategoryFilter = cat.id" class="px-2.5 py-1 rounded-full text-[10px] font-semibold whitespace-nowrap transition-colors" :class="selectedCategoryFilter == cat.id ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-700'" x-text="cat.name"></button>
+                                <button type="button" @click="selectPreviewCategory(cat.id)" class="px-2.5 py-1 rounded-full text-[10px] font-semibold whitespace-nowrap transition-colors" :class="selectedCategoryFilter == cat.id ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-700'" x-text="cat.name"></button>
                             </template>
                         </div>
+
+                        <!-- Subcategory Filter Pills in Preview -->
+                        <template x-if="activePreviewSubcategories.length > 0">
+                            <div class="px-4 mb-3 flex gap-1.5 overflow-x-auto pb-1">
+                                <button type="button" @click="selectedSubcategoryFilter = 'all'" class="px-2 py-0.5 rounded-full text-[9px] font-semibold whitespace-nowrap transition-colors border" :class="selectedSubcategoryFilter === 'all' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-600 border-slate-200'">All</button>
+                                <template x-for="sub in activePreviewSubcategories" :key="sub.id">
+                                    <button type="button" @click="selectedSubcategoryFilter = sub.id" class="px-2 py-0.5 rounded-full text-[9px] font-semibold whitespace-nowrap transition-colors border" :class="selectedSubcategoryFilter == sub.id ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-600 border-slate-200'" x-text="sub.name"></button>
+                                </template>
+                            </div>
+                        </template>
 
                         <!-- Product Catalog Preview -->
                         <div class="px-4 flex-1">
@@ -707,18 +838,79 @@
         </div>
 
         <!-- ADD CATEGORY MODAL -->
-        <div x-show="categoryModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4" x-cloak>
-            <div @click="categoryModalOpen = false" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
-            <div @click.stop class="relative z-10 w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl border border-slate-200">
+        <div x-show="categoryModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto" x-cloak>
+            <div @click="closeAddCategoryModal()" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
+            <div @click.stop class="relative z-10 w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 my-auto">
                 <h3 class="text-base font-bold text-slate-900 mb-4">Add New Category</h3>
-                <form method="POST" action="{{ route('admin.links.categories.store', $link) }}" class="space-y-4">
+                <form method="POST" action="{{ route('admin.links.categories.store', $link) }}" @submit="validateAndSubmitAddCategory($event)" class="space-y-4">
                     @csrf
                     <div>
                         <label for="cat_name" class="block text-xs font-semibold text-slate-700 mb-1">Category Name *</label>
-                        <input id="cat_name" type="text" name="name" required placeholder="e.g. Kaos, Hoodie" class="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none" />
+                        <input id="cat_name" type="text" name="name" x-model="newCategoryName" @input="categoryFormDirty = true; addCategoryError = ''" maxlength="100" required placeholder="e.g. Kalung, Pakaian" class="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none" />
                     </div>
-                    <div class="flex justify-end gap-2 pt-2">
-                        <button type="button" @click="categoryModalOpen = false" class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600">Cancel</button>
+
+                    <!-- Optional Subcategories Section -->
+                    <div class="space-y-2.5 pt-2 border-t border-slate-100">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <label for="new_subcat_input" class="block text-xs font-semibold text-slate-700">Subcategories <span class="text-slate-400 font-normal">(Optional)</span></label>
+                                <p class="text-[11px] text-slate-400">Add optional subcategories such as Emas, Perak, Perunggu</p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <input
+                                id="new_subcat_input"
+                                type="text"
+                                x-model="newSubcategoryInput"
+                                @keydown.enter.prevent="addSubcategoryToNew()"
+                                maxlength="100"
+                                placeholder="e.g. Emas, Perak"
+                                class="flex-1 rounded-xl border border-slate-200 px-3 py-1.5 text-xs text-slate-900 focus:border-indigo-500 focus:outline-none"
+                            />
+                            <button
+                                type="button"
+                                @click="addSubcategoryToNew()"
+                                class="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 font-semibold text-xs hover:bg-indigo-100 transition-colors shrink-0"
+                            >
+                                + Add Subcategory
+                            </button>
+                        </div>
+
+                        <p x-show="addCategoryError" x-text="addCategoryError" class="text-xs font-medium text-red-600" role="alert" x-cloak></p>
+
+                        <div x-show="newCategorySubcategories.length > 0" class="space-y-2 max-h-48 overflow-y-auto pr-1">
+                            <template x-for="(sub, index) in newCategorySubcategories" :key="index">
+                                <div class="flex items-center gap-2">
+                                    <input
+                                        type="text"
+                                        :name="`subcategories[${index}][name]`"
+                                        x-model="sub.name"
+                                        @input="categoryFormDirty = true; addCategoryError = ''"
+                                        maxlength="100"
+                                        required
+                                        aria-label="Subcategory Name"
+                                        placeholder="Subcategory name"
+                                        class="flex-1 rounded-xl border border-slate-200 px-3 py-1.5 text-xs text-slate-900 focus:border-indigo-500 focus:outline-none"
+                                    />
+                                    <button
+                                        type="button"
+                                        @click="removeSubcategoryFromNew(index)"
+                                        class="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                        title="Remove subcategory"
+                                        aria-label="Remove subcategory"
+                                    >
+                                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                        <button type="button" @click="closeAddCategoryModal()" class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600">Cancel</button>
                         <button type="submit" class="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold text-xs hover:bg-indigo-700">Create Category</button>
                     </div>
                 </form>
@@ -726,19 +918,84 @@
         </div>
 
         <!-- EDIT CATEGORY MODAL -->
-        <div x-show="editCategoryModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4" x-cloak>
-            <div @click="editCategoryModalOpen = false" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
-            <div @click.stop class="relative z-10 w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl border border-slate-200">
+        <div x-show="editCategoryModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto" x-cloak>
+            <div @click="closeEditCategoryModal()" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
+            <div @click.stop class="relative z-10 w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 my-auto">
                 <h3 class="text-base font-bold text-slate-900 mb-4">Edit Category</h3>
-                <form method="POST" :action="`/admin/links/{{ $link->id }}/categories/${editCategoryId}`" class="space-y-4">
+                <form method="POST" :action="`/admin/links/{{ $link->id }}/categories/${editCategoryId}`" @submit="validateAndSubmitEditCategory($event)" class="space-y-4">
                     @csrf
                     @method('PUT')
+                    <input type="hidden" name="sync_subcategories" value="1" />
                     <div>
                         <label for="edit_cat_name" class="block text-xs font-semibold text-slate-700 mb-1">Category Name *</label>
-                        <input id="edit_cat_name" type="text" name="name" x-model="editCategoryName" required class="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none" />
+                        <input id="edit_cat_name" type="text" name="name" x-model="editCategoryName" @input="editCategoryFormDirty = true; editCategoryError = ''" maxlength="100" required class="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none" />
                     </div>
-                    <div class="flex justify-end gap-2 pt-2">
-                        <button type="button" @click="editCategoryModalOpen = false" class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600">Cancel</button>
+
+                    <!-- Optional Subcategories Section -->
+                    <div class="space-y-2.5 pt-2 border-t border-slate-100">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <label for="edit_subcat_input" class="block text-xs font-semibold text-slate-700">Subcategories <span class="text-slate-400 font-normal">(Optional)</span></label>
+                                <p class="text-[11px] text-slate-400">Add, rename, or remove subcategories for this category</p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <input
+                                id="edit_subcat_input"
+                                type="text"
+                                x-model="editSubcategoryInput"
+                                @keydown.enter.prevent="addSubcategoryToEdit()"
+                                maxlength="100"
+                                placeholder="Add new subcategory..."
+                                class="flex-1 rounded-xl border border-slate-200 px-3 py-1.5 text-xs text-slate-900 focus:border-indigo-500 focus:outline-none"
+                            />
+                            <button
+                                type="button"
+                                @click="addSubcategoryToEdit()"
+                                class="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 font-semibold text-xs hover:bg-indigo-100 transition-colors shrink-0"
+                            >
+                                + Add Subcategory
+                            </button>
+                        </div>
+
+                        <p x-show="editCategoryError" x-text="editCategoryError" class="text-xs font-medium text-red-600" role="alert" x-cloak></p>
+
+                        <div x-show="editCategorySubcategories.length > 0" class="space-y-2 max-h-48 overflow-y-auto pr-1">
+                            <template x-for="(sub, index) in editCategorySubcategories" :key="sub.uid">
+                                <div class="flex items-center gap-2">
+                                    <template x-if="sub.id">
+                                        <input type="hidden" :name="`subcategories[${index}][id]`" :value="sub.id" />
+                                    </template>
+                                    <input
+                                        type="text"
+                                        :name="`subcategories[${index}][name]`"
+                                        x-model="sub.name"
+                                        @input="editCategoryFormDirty = true; editCategoryError = ''"
+                                        maxlength="100"
+                                        required
+                                        aria-label="Subcategory Name"
+                                        placeholder="Subcategory name"
+                                        class="flex-1 rounded-xl border border-slate-200 px-3 py-1.5 text-xs text-slate-900 focus:border-indigo-500 focus:outline-none"
+                                    />
+                                    <button
+                                        type="button"
+                                        @click="removeSubcategoryFromEdit(index)"
+                                        class="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                        title="Remove subcategory"
+                                        aria-label="Remove subcategory"
+                                    >
+                                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                        <button type="button" @click="closeEditCategoryModal()" class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600">Cancel</button>
                         <button type="submit" class="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold text-xs hover:bg-indigo-700">Update Category</button>
                     </div>
                 </form>
@@ -758,11 +1015,20 @@
                     </div>
                     <div>
                         <label for="prod_cat" class="block text-xs font-semibold text-slate-700 mb-1">Category *</label>
-                        <select id="prod_cat" name="category_id" required class="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 bg-white focus:border-indigo-500">
+                        <select id="prod_cat" name="category_id" x-model="newProductCategoryId" @change="newProductSubcategoryId = ''" required class="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 bg-white focus:border-indigo-500">
                             <option value="">Select Category</option>
                             @foreach($page->categories as $category)
                                 <option value="{{ $category->id }}">{{ $category->name }}</option>
                             @endforeach
+                        </select>
+                    </div>
+                    <div x-show="getSubcategoriesForCategory(newProductCategoryId).length > 0" x-cloak>
+                        <label for="prod_subcat" class="block text-xs font-semibold text-slate-700 mb-1">Subcategory <span class="text-slate-400 font-normal">(Optional)</span></label>
+                        <select id="prod_subcat" name="subcategory_id" x-model="newProductSubcategoryId" class="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 bg-white focus:border-indigo-500">
+                            <option value="">None (No Subcategory)</option>
+                            <template x-for="sub in getSubcategoriesForCategory(newProductCategoryId)" :key="sub.id">
+                                <option :value="sub.id" x-text="sub.name"></option>
+                            </template>
                         </select>
                     </div>
                     <div>
@@ -807,10 +1073,19 @@
                     </div>
                     <div>
                         <label for="edit_prod_cat" class="block text-xs font-semibold text-slate-700 mb-1">Category *</label>
-                        <select id="edit_prod_cat" name="category_id" x-model="productForm.category_id" required class="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 bg-white focus:border-indigo-500">
+                        <select id="edit_prod_cat" name="category_id" x-model="productForm.category_id" @change="productForm.subcategory_id = ''" required class="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 bg-white focus:border-indigo-500">
                             @foreach($page->categories as $category)
                                 <option value="{{ $category->id }}">{{ $category->name }}</option>
                             @endforeach
+                        </select>
+                    </div>
+                    <div x-show="getSubcategoriesForCategory(productForm.category_id).length > 0" x-cloak>
+                        <label for="edit_prod_subcat" class="block text-xs font-semibold text-slate-700 mb-1">Subcategory <span class="text-slate-400 font-normal">(Optional)</span></label>
+                        <select id="edit_prod_subcat" name="subcategory_id" x-model="productForm.subcategory_id" class="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 bg-white focus:border-indigo-500">
+                            <option value="">None (No Subcategory)</option>
+                            <template x-for="sub in getSubcategoriesForCategory(productForm.category_id)" :key="sub.id">
+                                <option :value="sub.id" x-text="sub.name" :selected="productForm.subcategory_id == sub.id"></option>
+                            </template>
                         </select>
                     </div>
                     <div>
@@ -855,6 +1130,139 @@
                         <button type="submit" class="px-4 py-2 rounded-xl bg-red-600 text-white font-semibold text-xs hover:bg-red-700">Delete Product</button>
                     </form>
                 </div>
+            </div>
+        </div>
+
+        <!-- BULK EDIT CATEGORY MODAL -->
+        <div x-show="bulkCategoryModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto" x-cloak>
+            <div @click="bulkCategoryModalOpen = false" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
+            <div @click.stop class="relative z-10 w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 my-auto">
+                <h3 class="text-base font-bold text-slate-900 mb-2">Bulk Edit Category</h3>
+                <p class="text-xs text-slate-500 mb-4">
+                    Change the parent category for <span class="font-bold text-indigo-600" x-text="selectedProductIds.length"></span> selected product(s).
+                </p>
+
+                <div class="p-3 mb-4 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-800 leading-relaxed">
+                    <strong>Note:</strong> If any selected product already has a subcategory assigned, that subcategory assignment will be cleared since subcategories are category-specific.
+                </div>
+
+                <form method="POST" action="{{ route('admin.links.products.bulk-action', $link) }}" class="space-y-4">
+                    @csrf
+                    <input type="hidden" name="action" value="update_category" />
+                    <template x-for="pid in selectedProductIds" :key="pid">
+                        <input type="hidden" name="product_ids[]" :value="pid" />
+                    </template>
+
+                    <div>
+                        <label for="bulk_category_id" class="block text-xs font-semibold text-slate-700 mb-1">Select Destination Category *</label>
+                        <select id="bulk_category_id" name="category_id" x-model="bulkCategoryId" required class="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 bg-white focus:border-indigo-500">
+                            <option value="">Select Category</option>
+                            @foreach($page->categories as $category)
+                                <option value="{{ $category->id }}">{{ $category->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                        <button type="button" @click="bulkCategoryModalOpen = false" class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600">Cancel</button>
+                        <button type="submit" :disabled="!bulkCategoryId" class="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold text-xs hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">Apply Category</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- BULK EDIT SUBCATEGORY MODAL -->
+        <div x-show="bulkSubcategoryModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto" x-cloak>
+            <div @click="bulkSubcategoryModalOpen = false" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
+            <div @click.stop class="relative z-10 w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 my-auto">
+                <h3 class="text-base font-bold text-slate-900 mb-2">Bulk Edit Subcategory</h3>
+                <p class="text-xs text-slate-500 mb-4">
+                    Update or clear the subcategory for <span class="font-bold text-indigo-600" x-text="selectedProductIds.length"></span> product(s) in category: <strong class="text-slate-800" x-text="selectedProductsSharedCategoryName"></strong>
+                </p>
+
+                <form method="POST" action="{{ route('admin.links.products.bulk-action', $link) }}" class="space-y-4">
+                    @csrf
+                    <input type="hidden" name="action" value="update_subcategory" />
+                    <template x-for="pid in selectedProductIds" :key="pid">
+                        <input type="hidden" name="product_ids[]" :value="pid" />
+                    </template>
+
+                    <div>
+                        <label for="bulk_subcategory_id" class="block text-xs font-semibold text-slate-700 mb-1">Select Subcategory</label>
+                        <select id="bulk_subcategory_id" name="subcategory_id" x-model="bulkSubcategoryId" class="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-900 bg-white focus:border-indigo-500">
+                            <option value="">None (Clear Subcategory)</option>
+                            <template x-for="sub in bulkSubcategoryOptions" :key="sub.id">
+                                <option :value="sub.id" x-text="sub.name"></option>
+                            </template>
+                        </select>
+                        <p class="mt-1 text-[11px] text-slate-400">Selecting "None" removes any existing subcategory without changing the parent category.</p>
+                    </div>
+
+                    <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                        <button type="button" @click="bulkSubcategoryModalOpen = false" class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600">Cancel</button>
+                        <button type="submit" class="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold text-xs hover:bg-indigo-700">Apply Subcategory</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- BULK STATUS MODAL (ACTIVATE / DEACTIVATE) -->
+        <div x-show="bulkStatusModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto" x-cloak>
+            <div @click="bulkStatusModalOpen = false" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
+            <div @click.stop class="relative z-10 w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 my-auto">
+                <h3 class="text-base font-bold text-slate-900 mb-2">
+                    <span x-text="bulkStatusAction === 'activate' ? 'Activate Products' : 'Deactivate Products'"></span>
+                </h3>
+                <p class="text-xs text-slate-500 mb-4">
+                    Are you sure you want to <span class="font-bold lowercase" x-text="bulkStatusAction"></span> <strong class="text-slate-900" x-text="selectedProductIds.length"></strong> selected product(s)?
+                </p>
+
+                <form method="POST" action="{{ route('admin.links.products.bulk-action', $link) }}" class="space-y-4">
+                    @csrf
+                    <input type="hidden" name="action" :value="bulkStatusAction" />
+                    <template x-for="pid in selectedProductIds" :key="pid">
+                        <input type="hidden" name="product_ids[]" :value="pid" />
+                    </template>
+
+                    <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                        <button type="button" @click="bulkStatusModalOpen = false" class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600">Cancel</button>
+                        <button 
+                            type="submit" 
+                            class="px-4 py-2 rounded-xl text-white font-semibold text-xs transition-colors"
+                            :class="bulkStatusAction === 'activate' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-600 hover:bg-amber-700'"
+                        >
+                            Confirm <span x-text="bulkStatusAction === 'activate' ? 'Activate' : 'Deactivate'"></span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- BULK DELETE MODAL -->
+        <div x-show="bulkDeleteModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto" x-cloak>
+            <div @click="bulkDeleteModalOpen = false" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
+            <div @click.stop class="relative z-10 w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 my-auto">
+                <h3 class="text-base font-bold text-slate-900 mb-2">Delete Selected Products?</h3>
+                <p class="text-xs text-slate-500 mb-4">
+                    Are you sure you want to delete <strong class="text-red-600" x-text="selectedProductIds.length"></strong> selected product(s)? This action cannot be undone.
+                </p>
+
+                <div class="p-3 mb-4 rounded-xl bg-red-50 border border-red-200 text-[11px] text-red-700 leading-relaxed">
+                    <strong>Warning:</strong> Selected products and their click tracking data will be removed. Their parent categories will remain intact.
+                </div>
+
+                <form method="POST" action="{{ route('admin.links.products.bulk-action', $link) }}" class="space-y-4">
+                    @csrf
+                    <input type="hidden" name="action" value="delete" />
+                    <template x-for="pid in selectedProductIds" :key="pid">
+                        <input type="hidden" name="product_ids[]" :value="pid" />
+                    </template>
+
+                    <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                        <button type="button" @click="bulkDeleteModalOpen = false" class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600">Cancel</button>
+                        <button type="submit" class="px-4 py-2 rounded-xl bg-red-600 text-white font-semibold text-xs hover:bg-red-700 shadow-xs">Yes, Delete Products</button>
+                    </div>
+                </form>
             </div>
         </div>
 
@@ -969,22 +1377,35 @@
                 categories: @json($page->categories),
                 products: @json($page->products),
                 selectedCategoryFilter: 'all',
+                selectedSubcategoryFilter: 'all',
 
                 // Category Modal State
                 categoryModalOpen: false,
                 editCategoryModalOpen: false,
-                categoryName: '',
+                newCategoryName: '',
+                newSubcategoryInput: '',
+                newCategorySubcategories: [],
+                categoryFormDirty: false,
+                addCategoryError: '',
+
                 editCategoryId: null,
                 editCategoryName: '',
+                editSubcategoryInput: '',
+                editCategorySubcategories: [],
+                editCategoryFormDirty: false,
+                editCategoryError: '',
 
                 // Product Modal State
                 productModalOpen: false,
                 editProductModalOpen: false,
                 deleteProductModalOpen: false,
+                newProductCategoryId: '',
+                newProductSubcategoryId: '',
                 productForm: {
                     id: null,
                     name: '',
                     category_id: '',
+                    subcategory_id: '',
                     product_url: '',
                     description: '',
                     image_url: '',
@@ -992,6 +1413,148 @@
                 },
 
                 activeProductToDelete: null,
+
+                // Bulk Selection & Action State
+                selectedProductIds: [],
+                bulkCategoryModalOpen: false,
+                bulkCategoryId: '',
+                bulkSubcategoryModalOpen: false,
+                bulkSubcategoryId: '',
+                bulkStatusModalOpen: false,
+                bulkStatusAction: 'activate',
+                bulkDeleteModalOpen: false,
+
+                get isAllCurrentPageSelected() {
+                    if (!this.products || this.products.length === 0) return false;
+                    return this.selectedProductIds.length === this.products.length;
+                },
+
+                get isHeaderIndeterminate() {
+                    return this.selectedProductIds.length > 0 && this.selectedProductIds.length < this.products.length;
+                },
+
+                toggleSelectAllCurrentPage(checked) {
+                    if (checked) {
+                        this.selectedProductIds = this.products.map(p => p.id);
+                    } else {
+                        this.selectedProductIds = [];
+                    }
+                },
+
+                toggleProductSelection(productId, checked) {
+                    if (checked) {
+                        if (!this.selectedProductIds.includes(productId)) {
+                            this.selectedProductIds.push(productId);
+                        }
+                    } else {
+                        this.selectedProductIds = this.selectedProductIds.filter(id => id !== productId);
+                    }
+                },
+
+                clearProductSelection() {
+                    this.selectedProductIds = [];
+                },
+
+                get selectedProductsList() {
+                    var self = this;
+                    return this.products.filter(function(p) {
+                        return self.selectedProductIds.includes(p.id);
+                    });
+                },
+
+                get canBulkEditSubcategory() {
+                    const list = this.selectedProductsList;
+                    if (list.length === 0) return false;
+                    const firstCatId = list[0].category_id;
+                    const allSameCategory = list.every(function(p) {
+                        return p.category_id === firstCatId;
+                    });
+                    return allSameCategory;
+                },
+
+                get subcategoryActionTooltip() {
+                    const list = this.selectedProductsList;
+                    if (list.length === 0) return 'Select products first';
+                    if (!this.canBulkEditSubcategory) {
+                        return 'All selected products must belong to the same parent category';
+                    }
+                    return 'Edit subcategory for selected products';
+                },
+
+                get selectedProductsSharedCategoryName() {
+                    const list = this.selectedProductsList;
+                    if (list.length === 0) return '';
+                    const first = list[0];
+                    if (first && first.category) {
+                        return first.category.name;
+                    }
+                    const cat = this.categories.find(c => c.id == first.category_id);
+                    return cat ? cat.name : '';
+                },
+
+                get bulkSubcategoryOptions() {
+                    const list = this.selectedProductsList;
+                    if (list.length === 0 || !this.canBulkEditSubcategory) return [];
+                    const catId = list[0].category_id;
+                    return this.getSubcategoriesForCategory(catId);
+                },
+
+                get statusActionVisibility() {
+                    const list = this.selectedProductsList;
+                    if (list.length === 0) {
+                        return { showActivate: false, showDeactivate: false };
+                    }
+                    const allActive = list.every(p => p.status === 'active');
+                    const allInactive = list.every(p => p.status === 'inactive');
+
+                    if (allActive) {
+                        return { showActivate: false, showDeactivate: true };
+                    }
+                    if (allInactive) {
+                        return { showActivate: true, showDeactivate: false };
+                    }
+                    // Mixed
+                    return { showActivate: true, showDeactivate: true };
+                },
+
+                openBulkCategoryModal() {
+                    this.bulkCategoryId = '';
+                    this.bulkCategoryModalOpen = true;
+                },
+
+                openBulkSubcategoryModal() {
+                    if (!this.canBulkEditSubcategory) {
+                        alert('All selected products must belong to the same parent category to edit their subcategory in bulk.');
+                        return;
+                    }
+                    this.bulkSubcategoryId = '';
+                    this.bulkSubcategoryModalOpen = true;
+                },
+
+                openBulkStatusModal(action) {
+                    this.bulkStatusAction = action;
+                    this.bulkStatusModalOpen = true;
+                },
+
+                openBulkDeleteModal() {
+                    this.bulkDeleteModalOpen = true;
+                },
+
+                selectPreviewCategory(catId) {
+                    this.selectedCategoryFilter = catId;
+                    this.selectedSubcategoryFilter = 'all';
+                },
+
+                get activePreviewSubcategories() {
+                    if (this.selectedCategoryFilter === 'all') {
+                        return [];
+                    }
+                    var self = this;
+                    var cat = this.categories.find(function(c) {
+                        return c.id == self.selectedCategoryFilter;
+                    });
+                    return (cat && cat.subcategories) ? cat.subcategories : [];
+                },
 
                 get filteredProducts() {
                     let activeOnly = this.products.filter(function(p) {
@@ -1001,9 +1564,23 @@
                         return activeOnly;
                     }
                     var self = this;
-                    return activeOnly.filter(function(p) {
+                    let byCat = activeOnly.filter(function(p) {
                         return p.category_id == self.selectedCategoryFilter;
                     });
+                    if (this.selectedSubcategoryFilter === 'all') {
+                        return byCat;
+                    }
+                    return byCat.filter(function(p) {
+                        return p.subcategory_id == self.selectedSubcategoryFilter;
+                    });
+                },
+
+                getSubcategoriesForCategory(categoryId) {
+                    if (!categoryId) return [];
+                    var cat = this.categories.find(function(c) {
+                        return c.id == categoryId;
+                    });
+                    return (cat && Array.isArray(cat.subcategories)) ? cat.subcategories : [];
                 },
 
                 markDirty() {
@@ -1026,10 +1603,208 @@
                     }
                 },
 
+                openAddCategoryModal() {
+                    this.newCategoryName = '';
+                    this.newSubcategoryInput = '';
+                    this.newCategorySubcategories = [];
+                    this.categoryFormDirty = false;
+                    this.addCategoryError = '';
+                    this.categoryModalOpen = true;
+                },
+
+                closeAddCategoryModal() {
+                    if (this.categoryFormDirty && (this.newCategoryName.trim() !== '' || this.newCategorySubcategories.length > 0 || this.newSubcategoryInput.trim() !== '')) {
+                        if (!confirm('Discard unsaved category changes?')) {
+                            return;
+                        }
+                    }
+                    this.categoryModalOpen = false;
+                    this.categoryFormDirty = false;
+                    this.addCategoryError = '';
+                },
+
+                addSubcategoryToNew() {
+                    const trimmed = this.newSubcategoryInput.trim();
+                    if (!trimmed) {
+                        this.addCategoryError = 'Subcategory name cannot be empty.';
+                        return;
+                    }
+                    const exists = this.newCategorySubcategories.some(function(s) {
+                        return s.name.trim().toLowerCase() === trimmed.toLowerCase();
+                    });
+                    if (exists) {
+                        this.addCategoryError = `Subcategory "${trimmed}" has already been added.`;
+                        return;
+                    }
+                    this.newCategorySubcategories.push({ name: trimmed });
+                    this.newSubcategoryInput = '';
+                    this.addCategoryError = '';
+                    this.categoryFormDirty = true;
+                },
+
+                removeSubcategoryFromNew(index) {
+                    this.newCategorySubcategories.splice(index, 1);
+                    this.addCategoryError = '';
+                    this.categoryFormDirty = true;
+                },
+
+                validateAndSubmitAddCategory(event) {
+                    this.addCategoryError = '';
+                    // If user typed a subcategory in the input box and clicked submit without clicking "+ Add", include it if valid
+                    if (this.newSubcategoryInput.trim() !== '') {
+                        const pending = this.newSubcategoryInput.trim();
+                        const dupPending = this.newCategorySubcategories.some(function(s) {
+                            return s.name.trim().toLowerCase() === pending.toLowerCase();
+                        });
+                        if (dupPending) {
+                            this.addCategoryError = `Duplicate subcategory name "${pending}".`;
+                            event.preventDefault();
+                            return;
+                        }
+                        this.newCategorySubcategories.push({ name: pending });
+                        this.newSubcategoryInput = '';
+                    }
+
+                    const catName = this.newCategoryName.trim();
+                    if (!catName) {
+                        this.addCategoryError = 'Category name is required.';
+                        event.preventDefault();
+                        return;
+                    }
+                    this.newCategoryName = catName;
+
+                    const seen = new Set();
+                    for (let i = 0; i < this.newCategorySubcategories.length; i++) {
+                        const sName = (this.newCategorySubcategories[i].name || '').trim();
+                        if (!sName) {
+                            this.addCategoryError = 'Subcategory name cannot be empty.';
+                            event.preventDefault();
+                            return;
+                        }
+                        const lower = sName.toLowerCase();
+                        if (seen.has(lower)) {
+                            this.addCategoryError = `Duplicate subcategory name "${sName}" within the same category.`;
+                            event.preventDefault();
+                            return;
+                        }
+                        seen.add(lower);
+                        this.newCategorySubcategories[i].name = sName;
+                    }
+
+                    this.categoryFormDirty = false;
+                },
+
                 openEditCategoryModal(cat) {
                     this.editCategoryId = cat.id;
                     this.editCategoryName = cat.name;
+                    this.editSubcategoryInput = '';
+                    this.editCategoryError = '';
+                    this.editCategoryFormDirty = false;
+                    this.editCategorySubcategories = Array.isArray(cat.subcategories)
+                        ? cat.subcategories.map(function(sub, idx) {
+                            return {
+                                uid: 'existing-' + sub.id + '-' + idx,
+                                id: sub.id,
+                                name: sub.name
+                            };
+                        })
+                        : [];
                     this.editCategoryModalOpen = true;
+                },
+
+                closeEditCategoryModal() {
+                    if (this.editCategoryFormDirty) {
+                        if (!confirm('Discard unsaved changes to this category?')) {
+                            return;
+                        }
+                    }
+                    this.editCategoryModalOpen = false;
+                    this.editCategoryFormDirty = false;
+                    this.editCategoryError = '';
+                },
+
+                addSubcategoryToEdit() {
+                    const trimmed = this.editSubcategoryInput.trim();
+                    if (!trimmed) {
+                        this.editCategoryError = 'Subcategory name cannot be empty.';
+                        return;
+                    }
+                    const exists = this.editCategorySubcategories.some(function(s) {
+                        return (s.name || '').trim().toLowerCase() === trimmed.toLowerCase();
+                    });
+                    if (exists) {
+                        this.editCategoryError = `Subcategory "${trimmed}" already exists in this category.`;
+                        return;
+                    }
+                    this.editCategorySubcategories.push({
+                        uid: 'new-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
+                        id: null,
+                        name: trimmed
+                    });
+                    this.editSubcategoryInput = '';
+                    this.editCategoryError = '';
+                    this.editCategoryFormDirty = true;
+                },
+
+                removeSubcategoryFromEdit(index) {
+                    this.editCategorySubcategories.splice(index, 1);
+                    this.editCategoryError = '';
+                    this.editCategoryFormDirty = true;
+                },
+
+                validateAndSubmitEditCategory(event) {
+                    this.editCategoryError = '';
+                    if (this.editSubcategoryInput.trim() !== '') {
+                        const pending = this.editSubcategoryInput.trim();
+                        const dupPending = this.editCategorySubcategories.some(function(s) {
+                            return (s.name || '').trim().toLowerCase() === pending.toLowerCase();
+                        });
+                        if (dupPending) {
+                            this.editCategoryError = `Duplicate subcategory name "${pending}".`;
+                            event.preventDefault();
+                            return;
+                        }
+                        this.editCategorySubcategories.push({
+                            uid: 'new-' + Date.now(),
+                            id: null,
+                            name: pending
+                        });
+                        this.editSubcategoryInput = '';
+                    }
+
+                    const catName = (this.editCategoryName || '').trim();
+                    if (!catName) {
+                        this.editCategoryError = 'Category name is required.';
+                        event.preventDefault();
+                        return;
+                    }
+                    this.editCategoryName = catName;
+
+                    const seen = new Set();
+                    for (let i = 0; i < this.editCategorySubcategories.length; i++) {
+                        const sName = (this.editCategorySubcategories[i].name || '').trim();
+                        if (!sName) {
+                            this.editCategoryError = 'Subcategory name cannot be empty.';
+                            event.preventDefault();
+                            return;
+                        }
+                        const lower = sName.toLowerCase();
+                        if (seen.has(lower)) {
+                            this.editCategoryError = `Duplicate subcategory name "${sName}" within the same category.`;
+                            event.preventDefault();
+                            return;
+                        }
+                        seen.add(lower);
+                        this.editCategorySubcategories[i].name = sName;
+                    }
+
+                    this.editCategoryFormDirty = false;
+                },
+
+                openAddProductModal() {
+                    this.newProductCategoryId = '';
+                    this.newProductSubcategoryId = '';
+                    this.productModalOpen = true;
                 },
 
                 openEditProductModal(product) {
@@ -1037,6 +1812,7 @@
                         id: product.id,
                         name: product.name,
                         category_id: product.category_id,
+                        subcategory_id: product.subcategory_id || '',
                         product_url: product.product_url,
                         description: product.description || '',
                         image_url: product.image_url || '',

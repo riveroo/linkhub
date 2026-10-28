@@ -162,20 +162,107 @@
 
             <!-- Products Catalog Section with Interactive Category Filter -->
             @if($products->count() > 0)
-                <div class="px-6 mb-8" x-data="{ selectedCategory: 'all' }">
+                @php
+                    $productFilterItems = $products->map(fn($p) => [
+                        'id' => $p->id,
+                        'name' => $p->name,
+                        'category_id' => $p->category_id,
+                        'subcategory_id' => $p->subcategory_id,
+                    ])->values();
+                @endphp
+                <div 
+                    class="px-6 mb-8" 
+                    x-data="{
+                        searchQuery: {{ Js::from(request()->query('q', request()->query('search', ''))) }},
+                        selectedCategory: 'all',
+                        selectedSubcategory: 'all',
+                        items: {{ Js::from($productFilterItems) }},
+                        selectCategory(categoryId) {
+                            this.selectedCategory = categoryId;
+                            this.selectedSubcategory = 'all';
+                        },
+                        selectSubcategory(subcategoryId) {
+                            this.selectedSubcategory = subcategoryId;
+                        },
+                        matchesFilter(categoryId, subcategoryId) {
+                            if (this.selectedCategory === 'all') {
+                                return true;
+                            }
+                            if (this.selectedCategory !== categoryId) {
+                                return false;
+                            }
+                            if (this.selectedSubcategory === 'all') {
+                                return true;
+                            }
+                            return this.selectedSubcategory === subcategoryId;
+                        },
+                        matchesSearch(name) {
+                            if (!this.searchQuery || this.searchQuery.trim() === '') {
+                                return true;
+                            }
+                            const q = this.searchQuery.trim().toLowerCase();
+                            return Boolean(name && name.toLowerCase().includes(q));
+                        },
+                        resetFilters() {
+                            this.searchQuery = '';
+                            if (this.selectedSubcategory !== 'all') {
+                                this.selectSubcategory('all');
+                            } else {
+                                this.selectCategory('all');
+                            }
+                        },
+                        get visibleCount() {
+                            return this.items.filter(item => 
+                                this.matchesFilter(item.category_id, item.subcategory_id) && 
+                                this.matchesSearch(item.name)
+                            ).length;
+                        }
+                    }"
+                >
                     <div class="mb-3 flex items-center justify-between pb-2 border-b border-slate-100">
                         <h2 class="text-sm font-bold text-slate-900 uppercase tracking-wider">Katalog Produk</h2>
                         <span class="text-xs font-semibold text-slate-400">{{ $products->count() }} Produk</span>
                     </div>
 
+                    <!-- Product Name Search Input -->
+                    <div class="mb-3.5">
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                                </svg>
+                            </div>
+                            <input 
+                                type="text" 
+                                x-model="searchQuery"
+                                placeholder="Cari nama produk..." 
+                                aria-label="Cari nama produk"
+                                class="w-full pl-9 pr-9 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                            />
+                            <button
+                                type="button"
+                                x-show="searchQuery && searchQuery.length > 0"
+                                x-cloak
+                                @click="searchQuery = ''"
+                                class="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                                aria-label="Hapus pencarian"
+                            >
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- Category Filter Pills Bar -->
                     @if($categories->count() > 0)
-                        <div class="mb-4 flex items-center gap-1.5 overflow-x-auto pb-1.5 scrollbar-none">
+                        <div class="mb-3 flex items-center gap-1.5 overflow-x-auto pb-1.5 scrollbar-none" role="group" aria-label="Filter kategori produk">
                             <button 
                                 type="button" 
-                                @click="selectedCategory = 'all'" 
+                                @click="selectCategory('all')" 
                                 class="px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all shrink-0"
                                 :class="selectedCategory === 'all' ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                                :aria-pressed="selectedCategory === 'all'"
                             >
                                 Semua ({{ $products->count() }})
                             </button>
@@ -183,26 +270,84 @@
                                 @php
                                     $catCount = $products->where('category_id', $category->id)->count();
                                 @endphp
-                                @if($catCount > 0)
+                                @if($catCount > 0 || $category->subcategories->count() > 0)
                                     <button 
                                         type="button" 
-                                        @click="selectedCategory = {{ $category->id }}" 
+                                        @click="selectCategory({{ $category->id }})" 
                                         class="px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all shrink-0"
                                         :class="selectedCategory === {{ $category->id }} ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                                        :aria-pressed="selectedCategory === {{ $category->id }}"
                                     >
                                         {{ $category->name }} ({{ $catCount }})
                                     </button>
                                 @endif
                             @endforeach
                         </div>
+
+                        <!-- Subcategory Contextual Filter Pills (Only rendered for categories that have subcategories) -->
+                        @foreach($categories as $category)
+                            @if($category->subcategories->count() > 0)
+                                @php
+                                    $catTotalCount = $products->where('category_id', $category->id)->count();
+                                @endphp
+                                <template x-if="selectedCategory === {{ $category->id }}">
+                                    <div 
+                                        data-subcategory-filter-for="{{ $category->id }}"
+                                        class="mb-4 flex items-center gap-1.5 overflow-x-auto pb-1.5 pt-0.5 scrollbar-none" 
+                                        role="group" 
+                                        aria-label="Filter subkategori {{ $category->name }}"
+                                    >
+                                        <button
+                                            type="button"
+                                            @click="selectSubcategory('all')"
+                                            class="px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap transition-all shrink-0 border"
+                                            :class="selectedSubcategory === 'all' ? 'bg-indigo-50 text-indigo-700 border-indigo-300 shadow-2xs' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'"
+                                            :aria-pressed="selectedSubcategory === 'all'"
+                                        >
+                                            Semua {{ $category->name }} ({{ $catTotalCount }})
+                                        </button>
+                                        @foreach($category->subcategories as $subcategory)
+                                            @php
+                                                $subCount = $products->where('category_id', $category->id)->where('subcategory_id', $subcategory->id)->count();
+                                            @endphp
+                                            <button
+                                                type="button"
+                                                @click="selectSubcategory({{ $subcategory->id }})"
+                                                class="px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap transition-all shrink-0 border"
+                                                :class="selectedSubcategory === {{ $subcategory->id }} ? 'bg-indigo-50 text-indigo-700 border-indigo-300 shadow-2xs' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'"
+                                                :aria-pressed="selectedSubcategory === {{ $subcategory->id }}"
+                                            >
+                                                {{ $subcategory->name }} ({{ $subCount }})
+                                            </button>
+                                        @endforeach
+                                    </div>
+                                </template>
+                            @endif
+                        @endforeach
                     @endif
+
+                    <!-- Empty State When No Products Match Active Filter -->
+                    <div 
+                        x-show="visibleCount === 0" 
+                        x-cloak
+                        class="py-8 px-4 text-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/60"
+                    >
+                        <p class="text-xs font-semibold text-slate-600">Tidak ada produk yang sesuai dengan filter ini.</p>
+                        <button 
+                            type="button" 
+                            @click="resetFilters()"
+                            class="mt-2 inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-700 hover:underline"
+                        >
+                            Reset Filter
+                        </button>
+                    </div>
 
                     @if($productLayout === 'grid')
                         <!-- GRID LAYOUT (2 Columns) -->
-                        <div class="grid grid-cols-2 gap-3 sm:gap-4">
+                        <div class="grid grid-cols-2 gap-3 sm:gap-4" x-show="visibleCount > 0">
                             @foreach($products as $product)
                                 <div 
-                                    x-show="selectedCategory === 'all' || selectedCategory === {{ $product->category_id }}"
+                                    x-show="matchesFilter({{ $product->category_id }}, {{ $product->subcategory_id ?? 'null' }}) && matchesSearch({{ Js::from($product->name) }})"
                                     x-transition:enter="transition ease-out duration-150"
                                     x-transition:enter-start="opacity-0 scale-95"
                                     x-transition:enter-end="opacity-100 scale-100"
@@ -222,7 +367,7 @@
                                             <!-- Category Badge -->
                                             @if($product->category)
                                                 <span class="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-slate-900/70 backdrop-blur-xs text-white text-[10px] font-semibold">
-                                                    {{ $product->category->name }}
+                                                    {{ $product->category->name }}@if($product->subcategory) &bull; {{ $product->subcategory->name }}@endif
                                                 </span>
                                             @endif
                                         </div>
@@ -255,10 +400,10 @@
                         </div>
                     @else
                         <!-- LIST LAYOUT (1 Column Horizontal Cards) -->
-                        <div class="space-y-3">
+                        <div class="space-y-3" x-show="visibleCount > 0">
                             @foreach($products as $product)
                                 <div 
-                                    x-show="selectedCategory === 'all' || selectedCategory === {{ $product->category_id }}"
+                                    x-show="matchesFilter({{ $product->category_id }}, {{ $product->subcategory_id ?? 'null' }}) && matchesSearch({{ Js::from($product->name) }})"
                                     x-transition:enter="transition ease-out duration-150"
                                     x-transition:enter-start="opacity-0 scale-95"
                                     x-transition:enter-end="opacity-100 scale-100"
@@ -279,7 +424,7 @@
                                     <div class="flex-1 min-w-0">
                                         @if($product->category)
                                             <span class="inline-block px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px] font-semibold mb-1">
-                                                {{ $product->category->name }}
+                                                {{ $product->category->name }}@if($product->subcategory) &bull; {{ $product->subcategory->name }}@endif
                                             </span>
                                         @endif
                                         <h3 class="font-bold text-xs sm:text-sm text-slate-900 truncate">

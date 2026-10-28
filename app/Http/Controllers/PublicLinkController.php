@@ -62,12 +62,12 @@ class PublicLinkController extends Controller
 
         $link->load([
             'page.socials',
-            'page.categories',
+            'page.categories.subcategories',
             'page.products' => function ($query) {
                 $query->where('status', 'active')
                     ->orderBy('display_order', 'asc')
                     ->orderBy('created_at', 'asc')
-                    ->with('category');
+                    ->with(['category', 'subcategory']);
             },
         ]);
 

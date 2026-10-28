@@ -8,6 +8,7 @@ use App\Models\LinkCategory;
 use App\Models\LinkPage;
 use App\Models\LinkProduct;
 use App\Models\LinkSocial;
+use App\Models\LinkSubcategory;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -168,5 +169,81 @@ class PublicLinkPageTest extends TestCase
         $admin = User::factory()->create();
         $adminResponse = $this->actingAs($admin)->get('/admin/links');
         $adminResponse->assertStatus(200);
+    }
+
+    public function test_hierarchical_category_and_subcategory_filters_render_correctly_on_public_page(): void
+    {
+        // Create a category WITH subcategories (Kalung -> Emas, Perak, Perunggu)
+        $catKalung = LinkCategory::create([
+            'link_page_id' => $this->page->id,
+            'name' => 'Kalung',
+        ]);
+
+        $subEmas = LinkSubcategory::create(['category_id' => $catKalung->id, 'name' => 'Emas']);
+        $subPerak = LinkSubcategory::create(['category_id' => $catKalung->id, 'name' => 'Perak']);
+        $subPerunggu = LinkSubcategory::create(['category_id' => $catKalung->id, 'name' => 'Perunggu']);
+
+        // Create products under Kalung: one in Emas, one directly in Kalung (no subcategory)
+        $prodEmas = LinkProduct::create([
+            'link_page_id' => $this->page->id,
+            'category_id' => $catKalung->id,
+            'subcategory_id' => $subEmas->id,
+            'name' => 'Kalung Emas Asli',
+            'product_url' => 'https://shopee.co.id/kalung-emas',
+            'status' => 'active',
+            'display_order' => 3,
+        ]);
+
+        $prodNoSub = LinkProduct::create([
+            'link_page_id' => $this->page->id,
+            'category_id' => $catKalung->id,
+            'subcategory_id' => null,
+            'name' => 'Kalung Polos Standar',
+            'product_url' => 'https://shopee.co.id/kalung-polos',
+            'status' => 'active',
+            'display_order' => 4,
+        ]);
+
+        // Existing category 'Kaos' from setUp has 0 subcategories and 1 active product
+        $catKaos = LinkCategory::where('link_page_id', $this->page->id)->where('name', 'Kaos')->firstOrFail();
+
+        $response = $this->get('/tokoberly');
+        $response->assertStatus(200);
+
+        // Parent category filter pills
+        $response->assertSee('Semua (3)');
+        $response->assertSee('Kaos (1)');
+        $response->assertSee('Kalung (2)');
+
+        // Subcategory contextual filter exists for Kalung, with "Semua Kalung (2)" and each subcategory
+        $response->assertSee("data-subcategory-filter-for=\"{$catKalung->id}\"", false);
+        $response->assertSee('Semua Kalung (2)');
+        $response->assertSee('Emas (1)');
+        $response->assertSee('Perak (0)');
+        $response->assertSee('Perunggu (0)');
+
+        // Category without subcategories ('Kaos') does NOT render a subcategory filter container
+        $response->assertDontSee("data-subcategory-filter-for=\"{$catKaos->id}\"", false);
+
+        // Product filtering bindings include both category_id and subcategory_id (or null)
+        $response->assertSee("matchesFilter({$catKalung->id}, {$subEmas->id})", false);
+        $response->assertSee("matchesFilter({$catKalung->id}, null)", false);
+        $response->assertSee("matchesFilter({$catKaos->id}, null)", false);
+
+        // Switching parent category resets selectedSubcategory to 'all'
+        $response->assertSee("selectCategory(categoryId)", false);
+        $response->assertSee("this.selectedSubcategory = 'all'", false);
+    }
+
+    public function test_product_name_search_input_renders_on_public_page(): void
+    {
+        $response = $this->get('/tokoberly');
+        $response->assertStatus(200);
+
+        // Search input with model and placeholder
+        $response->assertSee('x-model="searchQuery"', false);
+        $response->assertSee('placeholder="Cari nama produk..."', false);
+        $response->assertSee('aria-label="Cari nama produk"', false);
+        $response->assertSee('matchesSearch(', false);
     }
 }

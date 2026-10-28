@@ -25,4 +25,9 @@ class LinkCategory extends Model
     {
         return $this->hasMany(LinkProduct::class, 'category_id');
     }
+
+    public function subcategories(): HasMany
+    {
+        return $this->hasMany(LinkSubcategory::class, 'category_id')->orderBy('id', 'asc');
+    }
 }

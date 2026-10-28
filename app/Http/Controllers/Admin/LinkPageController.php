@@ -8,9 +8,13 @@ use App\Models\LinkCategory;
 use App\Models\LinkPage;
 use App\Models\LinkProduct;
 use App\Models\LinkSocial;
+use App\Models\LinkSubcategory;
+use App\Services\ProductBulkActionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
@@ -30,7 +34,7 @@ class LinkPageController extends Controller
             'cover_color' => '#4f46e5',
         ]);
 
-        $page->load(['socials', 'categories', 'products.category']);
+        $page->load(['socials', 'categories.subcategories', 'products.category', 'products.subcategory']);
 
         $socialsMap = $page->socials->pluck('url', 'platform')->toArray();
 
@@ -142,21 +146,75 @@ class LinkPageController extends Controller
             'cover_color' => '#4f46e5',
         ]);
 
-        $validated = $request->validate([
+        $rawName = trim((string) $request->input('name', ''));
+        $rawSubcategories = $request->input('subcategories', []);
+        if (!is_array($rawSubcategories)) {
+            $rawSubcategories = [];
+        }
+
+        $request->merge(['name' => $rawName]);
+
+        $validator = Validator::make($request->all(), [
             'name' => [
                 'required',
                 'string',
                 'max:100',
-                Rule::unique('link_categories', 'name')->where('link_page_id', $page->id),
+                function ($attribute, $value, $fail) use ($page) {
+                    $exists = LinkCategory::where('link_page_id', $page->id)
+                        ->whereRaw('LOWER(name) = ?', [mb_strtolower($value)])
+                        ->exists();
+                    if ($exists) {
+                        $fail('This category name already exists for this page.');
+                    }
+                },
             ],
-        ], [
-            'name.unique' => 'This category name already exists for this page.',
+            'subcategories' => ['nullable', 'array'],
         ]);
 
-        LinkCategory::create([
-            'link_page_id' => $page->id,
-            'name' => $validated['name'],
-        ]);
+        $normalizedSubcategories = [];
+        $seenLower = [];
+
+        $validator->after(function ($validator) use ($rawSubcategories, &$normalizedSubcategories, &$seenLower) {
+            foreach ($rawSubcategories as $index => $item) {
+                $subName = is_array($item) ? ($item['name'] ?? '') : (is_scalar($item) ? (string) $item : '');
+                $trimmed = trim($subName);
+
+                if ($trimmed === '') {
+                    $validator->errors()->add("subcategories.{$index}", 'Subcategory name cannot be empty.');
+                    continue;
+                }
+
+                if (mb_strlen($trimmed) > 100) {
+                    $validator->errors()->add("subcategories.{$index}", 'Subcategory name must not exceed 100 characters.');
+                    continue;
+                }
+
+                $lower = mb_strtolower($trimmed);
+                if (isset($seenLower[$lower])) {
+                    $validator->errors()->add("subcategories.{$index}", "Duplicate subcategory name \"{$trimmed}\" within the same category.");
+                    continue;
+                }
+
+                $seenLower[$lower] = true;
+                $normalizedSubcategories[] = $trimmed;
+            }
+        });
+
+        $validated = $validator->validate();
+
+        DB::transaction(function () use ($page, $validated, $normalizedSubcategories) {
+            $category = LinkCategory::create([
+                'link_page_id' => $page->id,
+                'name' => $validated['name'],
+            ]);
+
+            foreach ($normalizedSubcategories as $subName) {
+                LinkSubcategory::create([
+                    'category_id' => $category->id,
+                    'name' => $subName,
+                ]);
+            }
+        });
 
         return redirect()->route('admin.links.edit-page', ['link' => $link, 'tab' => 'products'])
             ->with('success', 'Category created successfully.');
@@ -167,18 +225,140 @@ class LinkPageController extends Controller
      */
     public function updateCategory(Request $request, Link $link, LinkCategory $category): RedirectResponse
     {
-        $validated = $request->validate([
+        if (!$link->page || $category->link_page_id !== $link->page->id) {
+            abort(404);
+        }
+
+        $rawName = trim((string) $request->input('name', ''));
+        $hasSubcategoriesInput = $request->has('subcategories') || $request->boolean('sync_subcategories');
+        $rawSubcategories = $request->input('subcategories', []);
+        if (!is_array($rawSubcategories)) {
+            $rawSubcategories = [];
+        }
+
+        $request->merge(['name' => $rawName]);
+
+        $validator = Validator::make($request->all(), [
             'name' => [
                 'required',
                 'string',
                 'max:100',
-                Rule::unique('link_categories', 'name')
-                    ->where('link_page_id', $link->page->id)
-                    ->ignore($category->id),
+                function ($attribute, $value, $fail) use ($link, $category) {
+                    $exists = LinkCategory::where('link_page_id', $link->page->id)
+                        ->where('id', '!=', $category->id)
+                        ->whereRaw('LOWER(name) = ?', [mb_strtolower($value)])
+                        ->exists();
+                    if ($exists) {
+                        $fail('This category name already exists for this page.');
+                    }
+                },
             ],
+            'subcategories' => ['nullable', 'array'],
         ]);
 
-        $category->update(['name' => $validated['name']]);
+        $normalizedSubcategories = [];
+        $seenLower = [];
+        $existingSubcategories = $category->subcategories()->pluck('id')->all();
+
+        $validator->after(function ($validator) use ($rawSubcategories, &$normalizedSubcategories, &$seenLower, $existingSubcategories) {
+            foreach ($rawSubcategories as $index => $item) {
+                $subId = is_array($item) && !empty($item['id']) ? (int) $item['id'] : null;
+                $subName = is_array($item) ? ($item['name'] ?? '') : (is_scalar($item) ? (string) $item : '');
+                $trimmed = trim((string) $subName);
+
+                if ($subId !== null && !in_array($subId, $existingSubcategories, true)) {
+                    $validator->errors()->add("subcategories.{$index}", 'Invalid subcategory reference for this category.');
+                    continue;
+                }
+
+                if ($trimmed === '') {
+                    $validator->errors()->add("subcategories.{$index}", 'Subcategory name cannot be empty.');
+                    continue;
+                }
+
+                if (mb_strlen($trimmed) > 100) {
+                    $validator->errors()->add("subcategories.{$index}", 'Subcategory name must not exceed 100 characters.');
+                    continue;
+                }
+
+                $lower = mb_strtolower($trimmed);
+                if (isset($seenLower[$lower])) {
+                    $validator->errors()->add("subcategories.{$index}", "Duplicate subcategory name \"{$trimmed}\" within the same category.");
+                    continue;
+                }
+
+                $seenLower[$lower] = true;
+                $normalizedSubcategories[] = [
+                    'id' => $subId,
+                    'name' => $trimmed,
+                ];
+            }
+        });
+
+        $validated = $validator->validate();
+
+        DB::transaction(function () use ($category, $validated, $hasSubcategoriesInput, $normalizedSubcategories) {
+            $category->update(['name' => $validated['name']]);
+
+            if ($hasSubcategoriesInput) {
+                $existingById = $category->subcategories()->get()->keyBy('id');
+                $keptIds = [];
+
+                // Match un-ID'd inputs to existing subcategories with the same name if not already matched by ID
+                $submittedIds = array_filter(array_column($normalizedSubcategories, 'id'));
+
+                foreach ($normalizedSubcategories as &$item) {
+                    if ($item['id'] === null) {
+                        $match = $existingById->first(function ($sub) use ($item, $submittedIds, $keptIds) {
+                            return !in_array($sub->id, $submittedIds, true)
+                                && !in_array($sub->id, $keptIds, true)
+                                && mb_strtolower($sub->name) === mb_strtolower($item['name']);
+                        });
+                        if ($match) {
+                            $item['id'] = $match->id;
+                        }
+                    }
+                    if ($item['id'] !== null) {
+                        $keptIds[] = $item['id'];
+                    }
+                }
+                unset($item);
+
+                // Delete removed subcategories first (products referencing them will have subcategory_id set to null)
+                $toDeleteIds = array_diff($existingById->keys()->all(), $keptIds);
+                if (!empty($toDeleteIds)) {
+                    LinkProduct::where('category_id', $category->id)
+                        ->whereIn('subcategory_id', $toDeleteIds)
+                        ->update(['subcategory_id' => null]);
+
+                    LinkSubcategory::where('category_id', $category->id)
+                        ->whereIn('id', $toDeleteIds)
+                        ->delete();
+                }
+
+                // Temporary rename pass if needed to avoid unique index collision when swapping names
+                foreach ($normalizedSubcategories as $idx => $item) {
+                    if ($item['id'] !== null && isset($existingById[$item['id']])) {
+                        $sub = $existingById[$item['id']];
+                        if ($sub->name !== $item['name']) {
+                            $sub->update(['name' => "__tmp_{$sub->id}_{$idx}__"]);
+                        }
+                    }
+                }
+
+                // Apply updates and creations
+                foreach ($normalizedSubcategories as $item) {
+                    if ($item['id'] !== null && isset($existingById[$item['id']])) {
+                        $existingById[$item['id']]->update(['name' => $item['name']]);
+                    } else {
+                        LinkSubcategory::create([
+                            'category_id' => $category->id,
+                            'name' => $item['name'],
+                        ]);
+                    }
+                }
+            }
+        });
 
         return redirect()->route('admin.links.edit-page', ['link' => $link, 'tab' => 'products'])
             ->with('success', 'Category updated successfully.');
@@ -189,6 +369,10 @@ class LinkPageController extends Controller
      */
     public function destroyCategory(Link $link, LinkCategory $category): RedirectResponse
     {
+        if (!$link->page || $category->link_page_id !== $link->page->id) {
+            abort(404);
+        }
+
         $category->delete();
 
         return redirect()->route('admin.links.edit-page', ['link' => $link, 'tab' => 'products'])
@@ -208,17 +392,27 @@ class LinkPageController extends Controller
             'cover_color' => '#4f46e5',
         ]);
 
+        if ($request->input('subcategory_id') === '') {
+            $request->merge(['subcategory_id' => null]);
+        }
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'category_id' => [
                 'required',
                 Rule::exists('link_categories', 'id')->where('link_page_id', $page->id),
             ],
+            'subcategory_id' => [
+                'nullable',
+                Rule::exists('link_subcategories', 'id')->where('category_id', $request->input('category_id')),
+            ],
             'product_url' => ['required', 'url', 'max:2048'],
             'description' => ['nullable', 'string', 'max:1000'],
             'image_url' => ['nullable', 'string', 'max:2048'],
             'image_file' => ['nullable', 'image', 'max:2048'],
             'status' => ['required', Rule::in(['active', 'inactive'])],
+        ], [
+            'subcategory_id.exists' => 'The selected subcategory does not belong to the selected category.',
         ]);
 
         if ($request->hasFile('image_file')) {
@@ -231,6 +425,7 @@ class LinkPageController extends Controller
         LinkProduct::create([
             'link_page_id' => $page->id,
             'category_id' => $validated['category_id'],
+            'subcategory_id' => $validated['subcategory_id'] ?? null,
             'name' => $validated['name'],
             'description' => $validated['description'] ?? null,
             'image_url' => $validated['image_url'] ?? null,
@@ -256,17 +451,31 @@ class LinkPageController extends Controller
             'cover_color' => '#4f46e5',
         ]);
 
+        if ($product->link_page_id !== $page->id) {
+            abort(404);
+        }
+
+        if ($request->input('subcategory_id') === '') {
+            $request->merge(['subcategory_id' => null]);
+        }
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'category_id' => [
                 'required',
                 Rule::exists('link_categories', 'id')->where('link_page_id', $page->id),
             ],
+            'subcategory_id' => [
+                'nullable',
+                Rule::exists('link_subcategories', 'id')->where('category_id', $request->input('category_id')),
+            ],
             'product_url' => ['required', 'url', 'max:2048'],
             'description' => ['nullable', 'string', 'max:1000'],
             'image_url' => ['nullable', 'string', 'max:2048'],
             'image_file' => ['nullable', 'image', 'max:2048'],
             'status' => ['required', Rule::in(['active', 'inactive'])],
+        ], [
+            'subcategory_id.exists' => 'The selected subcategory does not belong to the selected category.',
         ]);
 
         if ($request->hasFile('image_file')) {
@@ -276,6 +485,7 @@ class LinkPageController extends Controller
 
         $product->update([
             'category_id' => $validated['category_id'],
+            'subcategory_id' => $validated['subcategory_id'] ?? null,
             'name' => $validated['name'],
             'description' => $validated['description'] ?? null,
             'image_url' => $validated['image_url'] ?? $product->image_url,
@@ -292,6 +502,10 @@ class LinkPageController extends Controller
      */
     public function destroyProduct(Link $link, LinkProduct $product): RedirectResponse
     {
+        if (!$link->page || $product->link_page_id !== $link->page->id) {
+            abort(404);
+        }
+
         $product->delete();
 
         return redirect()->route('admin.links.edit-page', ['link' => $link, 'tab' => 'products'])
@@ -303,6 +517,10 @@ class LinkPageController extends Controller
      */
     public function toggleProductStatus(Link $link, LinkProduct $product): RedirectResponse
     {
+        if (!$link->page || $product->link_page_id !== $link->page->id) {
+            abort(404);
+        }
+
         $newStatus = $product->status === 'active' ? 'inactive' : 'active';
         $product->update(['status' => $newStatus]);
 
@@ -467,6 +685,57 @@ class LinkPageController extends Controller
         return response()->streamDownload($callback, 'product_import_template.csv', [
             'Content-Type' => 'text/csv',
         ]);
+    }
+
+    /**
+     * Execute bulk action on selected products (category, subcategory, status, delete).
+     */
+    public function bulkAction(Request $request, Link $link, ProductBulkActionService $bulkService): RedirectResponse
+    {
+        $validated = $request->validate([
+            'action' => ['required', 'string', Rule::in(['update_category', 'update_subcategory', 'activate', 'deactivate', 'delete'])],
+            'product_ids' => ['required', 'array', 'min:1'],
+            'product_ids.*' => ['required', 'integer'],
+            'category_id' => ['required_if:action,update_category', 'nullable', 'integer'],
+            'subcategory_id' => ['nullable'], // can be empty string or integer
+        ]);
+
+        $productIds = $validated['product_ids'];
+        $action = $validated['action'];
+
+        switch ($action) {
+            case 'update_category':
+                $count = $bulkService->updateCategory($link, $productIds, (int) $validated['category_id']);
+                $message = "Successfully updated category for {$count} product(s).";
+                break;
+
+            case 'update_subcategory':
+                $subId = !empty($validated['subcategory_id']) ? (int) $validated['subcategory_id'] : null;
+                $count = $bulkService->updateSubcategory($link, $productIds, $subId);
+                $message = "Successfully updated subcategory for {$count} product(s).";
+                break;
+
+            case 'activate':
+                $count = $bulkService->updateStatus($link, $productIds, 'active');
+                $message = "Successfully activated {$count} product(s).";
+                break;
+
+            case 'deactivate':
+                $count = $bulkService->updateStatus($link, $productIds, 'inactive');
+                $message = "Successfully deactivated {$count} product(s).";
+                break;
+
+            case 'delete':
+                $count = $bulkService->deleteProducts($link, $productIds);
+                $message = "Successfully deleted {$count} product(s).";
+                break;
+
+            default:
+                abort(400, 'Unsupported bulk action.');
+        }
+
+        return redirect()->route('admin.links.edit-page', ['link' => $link, 'tab' => 'products'])
+            ->with('success', $message);
     }
 
     private function findHeaderIndex(array $headers, array $candidates): int|false

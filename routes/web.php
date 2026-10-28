@@ -52,6 +52,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/links/{link}/products/order', [LinkPageController::class, 'updateProductOrder'])->name('links.products.order');
         Route::post('/links/{link}/products/import', [LinkPageController::class, 'importProducts'])->name('links.products.import');
         Route::get('/links/{link}/products/template', [LinkPageController::class, 'downloadProductTemplate'])->name('links.products.template');
+        Route::post('/links/{link}/products/bulk-action', [LinkPageController::class, 'bulkAction'])->name('links.products.bulk-action');
 
         // Source Management Routes
         Route::get('/links/{link}/sources', [SourceController::class, 'index'])->name('links.sources.index');
